@@ -34,6 +34,8 @@ export function PropertiesPanel() {
     const currentTime = useStore((state) => state.currentTime);
     const lockedIds = useStore((state) => state.lockedIds);
     const syncTextToShapes = useStore((state) => state.syncTextToShapes);
+    const convertToPath = useStore((state) => state.convertToPath);
+    const selectedShapePath = useStore((state) => state.selectedShapePath);
 
     const [fonts, setFonts] = useState<FontMetadata[]>([]);
     const [fontSearch, setFontSearch] = useState('');
@@ -62,17 +64,29 @@ export function PropertiesPanel() {
             pathParts.forEach(p => target = target[p]);
 
             updateLayer(selectedLayer.ind, {
-                [pathParts[0] || lastPart]: (target === selectedLayer)
+                [pathParts[0]]: (target === selectedLayer)
                     ? { ...(selectedLayer[lastPart as keyof typeof selectedLayer] as any), k: value }
-                    : { ...selectedLayer.ks, [lastPart]: { ...prop, k: value } }
+                    : deepUpdate(selectedLayer[pathParts[0] as keyof typeof selectedLayer], pathParts.slice(1), value, prop)
             });
+        }
+    };
 
-            // Special case for deep updates like ks.p
-            if (path.startsWith('ks.')) {
-                updateLayer(selectedLayer.ind, {
-                    ks: { ...selectedLayer.ks, [lastPart]: { ...prop, k: value } }
-                });
-            }
+    const deepUpdate = (obj: any, path: string[], value: any, prop: any): any => {
+        if (path.length === 0) {
+            return prop && prop.k !== undefined ? { ...prop, k: value } : value;
+        }
+        const key = path[0];
+        const nextPath = path.slice(1);
+        if (Array.isArray(obj)) {
+            const idx = parseInt(key);
+            const newArr = [...obj];
+            newArr[idx] = deepUpdate(obj[idx], nextPath, value, prop);
+            return newArr;
+        } else {
+            return {
+                ...obj,
+                [key]: deepUpdate(obj[key], nextPath, value, prop)
+            };
         }
     };
 
@@ -129,13 +143,26 @@ export function PropertiesPanel() {
         return null;
     };
 
-    const findPathShape = (shapes: ShapeElement[], pathPrefix = "shapes"): { shape: any, path: string } | null => {
+    const findPathShape = (shapes: any[], pathPrefix = "shapes"): { shape: any, path: string } | null => {
         for (let i = 0; i < shapes.length; i++) {
             const s = shapes[i];
             const currentPath = `${pathPrefix}.${i}`;
             if (s.ty === 'sh') return { shape: s, path: currentPath };
             if (s.ty === 'gr' && s.it) {
                 const found = findPathShape(s.it, `${currentPath}.it`);
+                if (found) return found;
+            }
+        }
+        return null;
+    };
+
+    const findParametricShape = (shapes: any[], pathPrefix = "shapes"): { shape: any, path: string } | null => {
+        for (let i = 0; i < shapes.length; i++) {
+            const s = shapes[i];
+            const currentPath = `${pathPrefix}.${i}`;
+            if (s.ty === 'rc' || s.ty === 'el' || s.ty === 'sr') return { shape: s, path: currentPath };
+            if (s.ty === 'gr' && s.it) {
+                const found = findParametricShape(s.it, `${currentPath}.it`);
                 if (found) return found;
             }
         }
@@ -261,13 +288,287 @@ export function PropertiesPanel() {
         }
     }
 
+    const parametricInfo = selectedLayer.shapes ? findParametricShape(selectedLayer.shapes) : null;
+
+    let selectedShape: any = null;
+    if (selectedShapePath && selectedLayer) {
+        const pathParts = selectedShapePath.split('.');
+        let current: any = selectedLayer;
+        pathParts.forEach(p => {
+            if (current && current[p] !== undefined) current = current[p];
+        });
+        selectedShape = current;
+    }
+
     return (
         <div className={clsx("h-full w-full bg-background flex flex-col text-xs transition-opacity", isLocked && "opacity-60 pointer-events-none")}>
             <div className="h-8 border-b flex items-center px-4 bg-muted/20 shrink-0 justify-between">
-                <span className="font-semibold text-muted-foreground uppercase tracking-widest text-[9px]">Properties</span>
+                <span className="font-semibold text-muted-foreground uppercase tracking-widest text-[9px]">
+                    {selectedShapePath ? `Selection: ${selectedShape?.nm || selectedShape?.ty}` : 'Properties'}
+                </span>
                 {isLocked && <Lock className="w-3 h-3 text-red-500" />}
             </div>
             <div className="p-4 space-y-6 overflow-y-auto custom-scrollbar">
+                {selectedShapePath && selectedShape && (
+                    <div className="space-y-4 p-3 bg-white/[0.03] border border-white/[0.05] rounded-lg">
+                        <div className="flex items-center justify-between border-b border-white/10 pb-2 mb-2">
+                            <span className="text-[10px] font-bold text-purple-400 uppercase tracking-widest">
+                                {selectedShape.ty === 'gr' ? 'Group' :
+                                    selectedShape.ty === 'fl' ? 'Fill' :
+                                        selectedShape.ty === 'st' ? 'Stroke' :
+                                            selectedShape.ty === 'sh' ? 'Path' :
+                                                selectedShape.ty === 'tr' ? 'Transform' : 'Item'} Properties
+                            </span>
+                            <button
+                                onClick={() => useStore.getState().selectShape(null)}
+                                className="text-[9px] text-muted-foreground hover:text-foreground transition-colors"
+                            >Close</button>
+                        </div>
+
+                        {/* Group / Shape Name */}
+                        <div className="space-y-1">
+                            <label className="text-[9px] text-muted-foreground uppercase">Name</label>
+                            <input
+                                className="w-full bg-input border border-border rounded px-2 py-1"
+                                value={selectedShape.nm || ''}
+                                onChange={(e) => handlePropertyChange(`${selectedShapePath}.nm`, e.target.value, null)}
+                            />
+                        </div>
+
+                        {/* Fill Properties */}
+                        {selectedShape.ty === 'fl' && (
+                            <div className="space-y-3">
+                                <div className="flex items-center gap-2">
+                                    <Stopwatch path={`${selectedShapePath}.c`} prop={selectedShape.c} />
+                                    <div className="flex-1 flex items-center justify-between">
+                                        <label className="text-[9px] text-muted-foreground uppercase">Color</label>
+                                        <input
+                                            type="color"
+                                            className="w-8 h-8 rounded bg-transparent border-0 p-0 cursor-pointer"
+                                            value={rgbToHex(getLottieVal<Vector3>(selectedShape.c, currentTime, 0)[0], getLottieVal<Vector3>(selectedShape.c, currentTime, 0)[1], getLottieVal<Vector3>(selectedShape.c, currentTime, 0)[2])}
+                                            onChange={(e) => handlePropertyChange(`${selectedShapePath}.c`, hexToRgb(e.target.value), selectedShape.c)}
+                                        />
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <Stopwatch path={`${selectedShapePath}.o`} prop={selectedShape.o} />
+                                    <div className="flex-1 space-y-1">
+                                        <label className="text-[9px] text-muted-foreground uppercase">Opacity %</label>
+                                        <input
+                                            type="range"
+                                            className="w-full accent-blue-500"
+                                            value={getLottieVal<number>(selectedShape.o, currentTime, 100)}
+                                            onChange={(e) => handlePropertyChange(`${selectedShapePath}.o`, Number(e.target.value), selectedShape.o)}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Stroke Properties */}
+                        {selectedShape.ty === 'st' && (
+                            <div className="space-y-3">
+                                <div className="flex items-center gap-2">
+                                    <Stopwatch path={`${selectedShapePath}.c`} prop={selectedShape.c} />
+                                    <div className="flex-1 flex items-center justify-between">
+                                        <label className="text-[9px] text-muted-foreground uppercase">Color</label>
+                                        <input
+                                            type="color"
+                                            className="w-8 h-8 rounded bg-transparent border-0 p-0 cursor-pointer"
+                                            value={rgbToHex(getLottieVal<Vector3>(selectedShape.c, currentTime, 0)[0], getLottieVal<Vector3>(selectedShape.c, currentTime, 0)[1], getLottieVal<Vector3>(selectedShape.c, currentTime, 0)[2])}
+                                            onChange={(e) => handlePropertyChange(`${selectedShapePath}.c`, hexToRgb(e.target.value), selectedShape.c)}
+                                        />
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <Stopwatch path={`${selectedShapePath}.w`} prop={selectedShape.w} />
+                                    <div className="flex-1 space-y-1">
+                                        <label className="text-[9px] text-muted-foreground uppercase">Width</label>
+                                        <input
+                                            type="number"
+                                            className="w-full bg-input border border-border rounded px-2 py-1"
+                                            value={getLottieVal<number>(selectedShape.w, currentTime, 1)}
+                                            onChange={(e) => handlePropertyChange(`${selectedShapePath}.w`, Number(e.target.value), selectedShape.w)}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Path Properties */}
+                        {selectedShape.ty === 'sh' && (
+                            <div className="pt-2">
+                                <label className="flex items-center gap-2 cursor-pointer group">
+                                    <div className="relative flex items-center justify-center">
+                                        <input
+                                            type="checkbox"
+                                            className="peer h-4 w-4 appearance-none rounded border border-border bg-input transition-all checked:bg-blue-500 checked:border-blue-500"
+                                            checked={getLottieVal<any>(selectedShape.ks, currentTime, {}).c || false}
+                                            onChange={(e) => {
+                                                const currentKs = getLottieVal<any>(selectedShape.ks, currentTime, {});
+                                                handlePropertyChange(`${selectedShapePath}.ks`, { ...currentKs, c: e.target.checked }, selectedShape.ks);
+                                            }}
+                                        />
+                                        <svg className="absolute h-3 w-3 text-white opacity-0 peer-checked:opacity-100 transition-opacity pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="4">
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                        </svg>
+                                    </div>
+                                    <span className="text-[10px] uppercase font-bold text-muted-foreground group-hover:text-foreground transition-colors">Closed Loop</span>
+                                </label>
+                                <p className="text-[9px] text-muted-foreground mt-2 italic">Edit vertices directly on the canvas using the selection tool.</p>
+                            </div>
+                        )}
+
+                        {/* Rectangle / Ellipse Properties */}
+                        {(selectedShape.ty === 'rc' || selectedShape.ty === 'el') && (
+                            <div className="space-y-3">
+                                <div className="flex items-center gap-2">
+                                    <Stopwatch path={`${selectedShapePath}.s`} prop={selectedShape.s} />
+                                    <div className="flex-1 space-y-1">
+                                        <label className="text-[9px] text-muted-foreground uppercase">Size</label>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <input type="number" className="w-full bg-input border border-border rounded px-2 py-1" value={Math.round(getLottieVal<number[]>(selectedShape.s, currentTime, [100, 100])[0])} onChange={(e) => {
+                                                const val = [...getLottieVal<number[]>(selectedShape.s, currentTime, [100, 100])];
+                                                val[0] = Number(e.target.value);
+                                                handlePropertyChange(`${selectedShapePath}.s`, val, selectedShape.s);
+                                            }} />
+                                            <input type="number" className="w-full bg-input border border-border rounded px-2 py-1" value={Math.round(getLottieVal<number[]>(selectedShape.s, currentTime, [100, 100])[1])} onChange={(e) => {
+                                                const val = [...getLottieVal<number[]>(selectedShape.s, currentTime, [100, 100])];
+                                                val[1] = Number(e.target.value);
+                                                handlePropertyChange(`${selectedShapePath}.s`, val, selectedShape.s);
+                                            }} />
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <Stopwatch path={`${selectedShapePath}.p`} prop={selectedShape.p} />
+                                    <div className="flex-1 space-y-1">
+                                        <label className="text-[9px] text-muted-foreground uppercase">Position</label>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <input type="number" className="w-full bg-input border border-border rounded px-2 py-1" value={Math.round(getLottieVal<number[]>(selectedShape.p, currentTime, [0, 0])[0])} onChange={(e) => {
+                                                const val = [...getLottieVal<number[]>(selectedShape.p, currentTime, [0, 0])];
+                                                val[0] = Number(e.target.value);
+                                                handlePropertyChange(`${selectedShapePath}.p`, val, selectedShape.p);
+                                            }} />
+                                            <input type="number" className="w-full bg-input border border-border rounded px-2 py-1" value={Math.round(getLottieVal<number[]>(selectedShape.p, currentTime, [0, 0])[1])} onChange={(e) => {
+                                                const val = [...getLottieVal<number[]>(selectedShape.p, currentTime, [0, 0])];
+                                                val[1] = Number(e.target.value);
+                                                handlePropertyChange(`${selectedShapePath}.p`, val, selectedShape.p);
+                                            }} />
+                                        </div>
+                                    </div>
+                                </div>
+                                {selectedShape.ty === 'rc' && (
+                                    <div className="flex items-center gap-2">
+                                        <Stopwatch path={`${selectedShapePath}.r`} prop={selectedShape.r} />
+                                        <div className="flex-1 space-y-1">
+                                            <label className="text-[9px] text-muted-foreground uppercase">Roundness</label>
+                                            <input type="number" className="w-full bg-input border border-border rounded px-2 py-1" value={getLottieVal<number>(selectedShape.r, currentTime, 0)} onChange={(e) => handlePropertyChange(`${selectedShapePath}.r`, Number(e.target.value), selectedShape.r)} />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Merge Paths */}
+                        {selectedShape.ty === 'mm' && (
+                            <div className="space-y-1">
+                                <label className="text-[9px] text-muted-foreground uppercase">Mode</label>
+                                <select
+                                    className="w-full bg-input border border-border rounded px-2 py-1"
+                                    value={selectedShape.mm || 1}
+                                    onChange={(e) => handlePropertyChange(`${selectedShapePath}.mm`, Number(e.target.value), null)}
+                                >
+                                    <option value={1}>Normal (Merge)</option>
+                                    <option value={2}>Add</option>
+                                    <option value={3}>Subtract</option>
+                                    <option value={4}>Intersect</option>
+                                    <option value={5}>Exclude Intersections</option>
+                                </select>
+                            </div>
+                        )}
+
+                        {/* Trim Paths */}
+                        {selectedShape.ty === 'tm' && (
+                            <div className="space-y-3">
+                                {[['s', 'Start %'], ['e', 'End %'], ['o', 'Offset']].map(([key, label]) => (
+                                    <div key={key} className="flex items-center gap-2">
+                                        <Stopwatch path={`${selectedShapePath}.${key}`} prop={selectedShape[key]} />
+                                        <div className="flex-1 space-y-1">
+                                            <label className="text-[9px] text-muted-foreground uppercase">{label}</label>
+                                            <div className="flex items-center gap-3">
+                                                <input
+                                                    type="range"
+                                                    className="flex-1 accent-purple-500"
+                                                    value={getLottieVal<number>(selectedShape[key], currentTime, key === 'e' ? 100 : 0)}
+                                                    onChange={(e) => handlePropertyChange(`${selectedShapePath}.${key}`, Number(e.target.value), selectedShape[key])}
+                                                />
+                                                <span className="w-8 text-right font-mono text-[9px]">{Math.round(getLottieVal<number>(selectedShape[key], currentTime, key === 'e' ? 100 : 0))}%</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {/* Transform Properties (Deep) */}
+                        {(selectedShape.ty === 'tr' || selectedShape.tr) && (
+                            <div className="space-y-4 pt-2">
+                                <div className="border-t border-white/5 pt-3">
+                                    <span className="text-[9px] font-bold text-muted-foreground uppercase opacity-50">Transform</span>
+                                </div>
+                                {['a', 'p', 's', 'r', 'o'].map(key => {
+                                    const tr = selectedShape.ty === 'tr' ? selectedShape : selectedShape.tr;
+                                    const prop = tr[key];
+                                    if (!prop) return null;
+                                    const label = key === 'a' ? 'Anchor' : key === 'p' ? 'Position' : key === 's' ? 'Scale' : key === 'r' ? 'Rotation' : 'Opacity';
+                                    const prefix = selectedShape.ty === 'tr' ? selectedShapePath : `${selectedShapePath}.tr`;
+
+                                    return (
+                                        <div key={key} className="flex items-center gap-2">
+                                            <Stopwatch path={`${prefix}.${key}`} prop={prop} />
+                                            <div className="flex-1 space-y-1">
+                                                <label className="text-[9px] text-muted-foreground uppercase">{label}</label>
+                                                {key === 'r' || key === 'o' ? (
+                                                    <input
+                                                        type="number"
+                                                        className="w-full bg-input border border-border rounded px-2 py-1"
+                                                        value={Math.round(getLottieVal<number>(prop, currentTime, 0))}
+                                                        onChange={(e) => handlePropertyChange(`${prefix}.${key}`, Number(e.target.value), prop)}
+                                                    />
+                                                ) : (
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        <input
+                                                            type="number"
+                                                            className="w-full bg-input border border-border rounded px-2 py-1"
+                                                            value={Math.round(getLottieVal<number[]>(prop, currentTime, [0, 0])[0])}
+                                                            onChange={(e) => {
+                                                                const val = [...getLottieVal<number[]>(prop, currentTime, [0, 0])];
+                                                                val[0] = Number(e.target.value);
+                                                                handlePropertyChange(`${prefix}.${key}`, val, prop);
+                                                            }}
+                                                        />
+                                                        <input
+                                                            type="number"
+                                                            className="w-full bg-input border border-border rounded px-2 py-1"
+                                                            value={Math.round(getLottieVal<number[]>(prop, currentTime, [0, 0])[1])}
+                                                            onChange={(e) => {
+                                                                const val = [...getLottieVal<number[]>(prop, currentTime, [0, 0])];
+                                                                val[1] = Number(e.target.value);
+                                                                handlePropertyChange(`${prefix}.${key}`, val, prop);
+                                                            }}
+                                                        />
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+                )}
+
                 <div className="space-y-1">
                     <label className="text-[10px] uppercase font-bold text-muted-foreground">Layer Name</label>
                     <input
@@ -438,6 +739,18 @@ export function PropertiesPanel() {
                                     </div>
                                     <span className="text-[10px] uppercase font-bold text-muted-foreground group-hover:text-foreground transition-colors">Closed Loop</span>
                                 </label>
+                            </div>
+                        )}
+
+                        {parametricInfo && (
+                            <div className="pt-4">
+                                <button
+                                    onClick={() => convertToPath(selectedLayer.ind, parametricInfo.path)}
+                                    className="w-full py-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded text-[10px] uppercase font-bold tracking-widest transition-all"
+                                >
+                                    Convert to Bezier Path
+                                </button>
+                                <p className="text-[9px] text-muted-foreground mt-2 italic">Standard shapes must be converted to paths before their vertices can be edited.</p>
                             </div>
                         )}
                     </div>

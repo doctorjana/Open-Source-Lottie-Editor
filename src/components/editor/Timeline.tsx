@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useStore } from '../../store/useStore';
 import { clsx } from 'clsx';
-import { ChevronRight, ChevronDown, Eye, Lock, Search, Filter, Link2, Ghost, Hash } from 'lucide-react';
+import { ChevronRight, ChevronDown, Eye, EyeOff, Lock, Search, Filter, Link2, Ghost, Hash, Trash2 } from 'lucide-react';
 import type { Layer } from '../../types/lottie';
 
 const SIDEBAR_DEFAULT_WIDTH = 420; // Increased for more columns
@@ -57,7 +57,7 @@ const PropertyRow = ({
 };
 
 // Recursive Layer Composition
-const LayerRow = ({ layer, index, sidebarWidth, indent = 0, parentId = '' }: { layer: Layer, index: number, sidebarWidth: number, indent?: number, parentId?: string }) => {
+const LayerRow = ({ layer, index, sidebarWidth, indent = 0 }: { layer: Layer, index: number, sidebarWidth: number, indent?: number }) => {
     const selectedLayerId = useStore((state) => state.selectedLayerId);
     const selectLayer = useStore((state) => state.selectLayer);
     const expandedIds = useStore((state) => state.expandedIds);
@@ -256,7 +256,6 @@ const LayerRow = ({ layer, index, sidebarWidth, indent = 0, parentId = '' }: { l
                                             index={subIdx}
                                             sidebarWidth={sidebarWidth}
                                             indent={2}
-                                            parentId={`layer-${layer.ind}`}
                                         />
                                     ))}
                                 </div>
@@ -284,15 +283,24 @@ const ShapeRow = ({
 }) => {
     const expandedIds = useStore(state => state.expandedIds);
     const toggleExpansion = useStore(state => state.toggleExpansion);
+    const selectShape = useStore(state => state.selectShape);
+    const selectedShapePath = useStore(state => state.selectedShapePath);
 
     const isExpanded = !!expandedIds[`layer-${layerInd}-shape-${path}`];
     const isTransformExpanded = !!expandedIds[`layer-${layerInd}-shape-${path}-transform`];
+    const isSelected = selectedShapePath === path;
 
     return (
         <div className="flex flex-col border-b border-border/5">
-            <div className="h-7 flex items-center hover:bg-white/[0.02]">
+            <div
+                className={clsx(
+                    "h-7 flex items-center cursor-pointer transition-colors",
+                    isSelected ? "bg-purple-500/20" : "hover:bg-white/[0.02]"
+                )}
+                onClick={() => selectShape(path)}
+            >
                 <div
-                    className="sticky left-0 z-30 border-r border-border/10 flex items-center shrink-0 bg-[#0d0d0d]"
+                    className="sticky left-0 z-30 border-r border-border/10 flex items-center shrink-0 bg-[#0d0d0d] group-hover:bg-[#151515] transition-colors h-full"
                     style={{ width: `${sidebarWidth}px`, paddingLeft: `${indent * 12 + 12}px` }}
                 >
                     <button
@@ -301,8 +309,35 @@ const ShapeRow = ({
                     >
                         {isExpanded ? <ChevronDown className="w-3 h-3 text-purple-400/60" /> : <ChevronRight className="w-3 h-3 text-muted-foreground/30" />}
                     </button>
-                    <div className="w-1.5 h-1.5 rounded-sm bg-purple-500/40 mr-2 shrink-0" />
-                    <span className="text-muted-foreground/80 truncate text-[10px]">{shape.nm || shape.ty}</span>
+                    <div className={clsx(
+                        "w-1.5 h-1.5 rounded-sm mr-2 shrink-0",
+                        isSelected ? "bg-purple-400" : "bg-purple-500/40"
+                    )} />
+                    <span className={clsx(
+                        "flex-1 truncate text-[10px]",
+                        isSelected ? "text-purple-300 font-bold" : "text-muted-foreground/80"
+                    )}>{shape.nm || shape.ty}</span>
+
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity pr-2">
+                        <button
+                            className={clsx("p-1 rounded hover:bg-white/10 transition-colors", shape.hd ? "text-red-400" : "text-muted-foreground/40")}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                useStore.getState().updateLayerProperty(layerInd, `${path}.hd`, !shape.hd);
+                            }}
+                        >
+                            {shape.hd ? <EyeOff className="w-2.5 h-2.5" /> : <Eye className="w-2.5 h-2.5" />}
+                        </button>
+                        <button
+                            className="p-1 rounded hover:bg-red-500/20 text-muted-foreground/20 hover:text-red-400 transition-colors"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                useStore.getState().deleteShape(layerInd, path);
+                            }}
+                        >
+                            <Trash2 className="w-2.5 h-2.5" />
+                        </button>
+                    </div>
                 </div>
                 <div className="flex-1 min-w-[3000px] border-r border-white/5" />
             </div>

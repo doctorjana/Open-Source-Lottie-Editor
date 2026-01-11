@@ -12,10 +12,12 @@ interface EditorState {
     expandedIds: Record<string, boolean>;
     lockedIds: Record<number, boolean>;
     activeTool: 'select' | 'rectangle' | 'circle' | 'star' | 'polygon' | 'pen' | 'text';
+    selectedShapePath: string | null; // e.g. "shapes.0.it.1"
 
     // Actions
     setAnimation: (animation: LottieAnimation) => void;
     updateLayer: (index: number, layer: Partial<Layer>) => void;
+    updateLayerProperty: (layerInd: number, propertyPath: string, value: any) => void;
     addLayer: (layer: Layer) => void;
     addTextLayer: (text: string) => void;
     deleteLayer: (index: number) => void;
@@ -28,6 +30,9 @@ interface EditorState {
     addKeyframe: (layerInd: number, propertyPath: string, time: number, value: any) => void;
     toggleAnimation: (layerInd: number, propertyPath: string) => void;
     syncTextToShapes: (layerInd: number) => Promise<void>;
+    convertToPath: (layerInd: number, shapePath: string) => void;
+    deleteShape: (layerInd: number, shapePath: string) => void;
+    selectShape: (path: string | null) => void;
 }
 
 export const useStore = create<EditorState>((set) => ({
@@ -39,6 +44,7 @@ export const useStore = create<EditorState>((set) => ({
     isPlaying: false,
     zoom: 1,
     activeTool: 'select',
+    selectedShapePath: null,
 
     setAnimation: (animation) => {
         console.log(`[setAnimation] Total Layers: ${animation.layers.length}, Assets: ${animation.assets?.length || 0}`);
@@ -95,6 +101,47 @@ export const useStore = create<EditorState>((set) => ({
         };
     }),
 
+    updateLayerProperty: (layerInd, propertyPath, value) => set((state) => {
+        const newLayers = state.animation.layers.map((layer) => {
+            if (layer.ind !== layerInd) return layer;
+            const newLayer = JSON.parse(JSON.stringify(layer));
+            const path = propertyPath.split('.');
+            let current = newLayer;
+            for (let i = 0; i < path.length - 1; i++) {
+                current = current[path[i]];
+            }
+            const key = path[path.length - 1];
+            if (current[key] && current[key].a === 0) {
+                current[key].k = value;
+            } else {
+                current[key] = value;
+            }
+            return newLayer;
+        });
+        return { animation: { ...state.animation, layers: newLayers } };
+    }),
+
+    deleteShape: (layerInd, shapePath) => set((state) => {
+        const newLayers = state.animation.layers.map((layer) => {
+            if (layer.ind !== layerInd) return layer;
+            const newLayer = JSON.parse(JSON.stringify(layer));
+            const pathArr = shapePath.split('.');
+            const index = parseInt(pathArr.pop()!);
+            let current = newLayer;
+            for (let i = 0; i < pathArr.length; i++) {
+                current = current[pathArr[i]];
+            }
+            if (Array.isArray(current)) {
+                current.splice(index, 1);
+            }
+            return newLayer;
+        });
+        return {
+            animation: { ...state.animation, layers: newLayers },
+            selectedShapePath: state.selectedShapePath === shapePath ? null : state.selectedShapePath
+        };
+    }),
+
     deleteLayer: (ind) => set((state) => ({
         animation: {
             ...state.animation,
@@ -103,7 +150,9 @@ export const useStore = create<EditorState>((set) => ({
         selectedLayerId: state.selectedLayerId === ind ? null : state.selectedLayerId
     })),
 
-    selectLayer: (id) => set({ selectedLayerId: id, activeTool: 'select' }),
+    selectLayer: (id) => set({ selectedLayerId: id, activeTool: 'select', selectedShapePath: null }),
+
+    selectShape: (path) => set({ selectedShapePath: path, activeTool: 'select' }),
 
     toggleExpansion: (id) => set((state) => ({
         expandedIds: {
@@ -323,5 +372,127 @@ export const useStore = create<EditorState>((set) => ({
         } catch (e) {
             console.error("Sync text failure", e);
         }
-    }
+    },
+
+    convertToPath: (layerInd, shapePath) => set((state) => {
+        const layer = state.animation.layers.find(l => l.ind === layerInd);
+        if (!layer || !layer.shapes) return state;
+
+        const newLayers = JSON.parse(JSON.stringify(state.animation.layers));
+        const targetLayer = newLayers.find((l: any) => l.ind === layerInd);
+
+        const pathParts = shapePath.split('.');
+        const lastIdx = parseInt(pathParts.pop()!);
+        let current = targetLayer.shapes;
+        for (let i = 1; i < pathParts.length; i++) {
+            current = current[pathParts[i]];
+        }
+
+        const original = current[lastIdx];
+        let newShape: any = null;
+
+        if (original.ty === 'rc') {
+            const size = [original.s.k[0], original.s.k[1]];
+            const pos = [original.p.k[0], original.p.k[1]];
+            const rot = (original.r?.k || 0) * (Math.PI / 180);
+            const w = size[0] / 2;
+            const h = size[1] / 2;
+
+            const rotate = (pt: [number, number]): [number, number] => {
+                if (rot === 0) return pt;
+                const cos = Math.cos(rot);
+                const sin = Math.sin(rot);
+                return [
+                    pt[0] * cos - pt[1] * sin,
+                    pt[0] * sin + pt[1] * cos
+                ];
+            };
+
+            const verts: [number, number][] = [
+                [-w, -h], [w, -h], [w, h], [-w, h]
+            ];
+
+            newShape = {
+                ty: 'sh',
+                nm: original.nm + " (Converted)",
+                ks: {
+                    a: 0,
+                    k: {
+                        i: [[0, 0], [0, 0], [0, 0], [0, 0]],
+                        o: [[0, 0], [0, 0], [0, 0], [0, 0]],
+                        v: verts.map(v => {
+                            const rotated = rotate(v);
+                            return [rotated[0] + pos[0], rotated[1] + pos[1]];
+                        }),
+                        c: true
+                    }
+                }
+            };
+        } else if (original.ty === 'el') {
+            const size = [original.s.k[0], original.s.k[1]];
+            const pos = [original.p.k[0], original.p.k[1]];
+            const rx = size[0] / 2;
+            const ry = size[1] / 2;
+            const k = 0.5522847498;
+
+            newShape = {
+                ty: 'sh',
+                nm: original.nm + " (Converted)",
+                ks: {
+                    a: 0,
+                    k: {
+                        i: [[rx * k, 0], [0, ry * k], [-rx * k, 0], [0, -ry * k]],
+                        o: [[-rx * k, 0], [0, -ry * k], [rx * k, 0], [0, ry * k]],
+                        v: [
+                            [pos[0] + rx, pos[1]],
+                            [pos[0], pos[1] + ry],
+                            [pos[0] - rx, pos[1]],
+                            [pos[0], pos[1] - ry]
+                        ],
+                        c: true
+                    }
+                }
+            };
+        } else if (original.ty === 'sr') {
+            const pos = original.p.k;
+            const points = original.pt.k;
+            const outerRadius = original.or.k;
+            const innerRadius = original.ir?.k || 0;
+            const rotation = (original.r.k - 90) * (Math.PI / 180);
+            const isStar = original.sy === 1;
+
+            const vertices: [number, number][] = [];
+            const count = isStar ? points * 2 : points;
+
+            for (let i = 0; i < count; i++) {
+                const angle = rotation + (i * Math.PI * 2) / count;
+                const r = (isStar && (i % 2 !== 0)) ? innerRadius : outerRadius;
+                vertices.push([
+                    pos[0] + Math.cos(angle) * r,
+                    pos[1] + Math.sin(angle) * r
+                ]);
+            }
+
+            newShape = {
+                ty: 'sh',
+                nm: original.nm + " (Converted)",
+                ks: {
+                    a: 0,
+                    k: {
+                        i: vertices.map(() => [0, 0]),
+                        o: vertices.map(() => [0, 0]),
+                        v: vertices,
+                        c: true
+                    }
+                }
+            };
+        }
+
+        if (newShape) {
+            current[lastIdx] = newShape;
+            return { animation: { ...state.animation, layers: newLayers } };
+        }
+
+        return state;
+    })
 }));

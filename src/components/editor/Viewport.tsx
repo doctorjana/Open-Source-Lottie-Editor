@@ -13,23 +13,26 @@ export function Viewport() {
     const currentTime = useStore((state) => state.currentTime);
     const setTime = useStore((state) => state.setTime);
     const activeTool = useStore((state) => state.activeTool);
+    const selectedShapePath = useStore((state) => state.selectedShapePath);
     const addLayer = useStore((state) => state.addLayer);
     const selectedLayerId = useStore((state) => state.selectedLayerId);
     const updateLayer = useStore((state) => state.updateLayer);
+    const updateLayerProperty = useStore((state) => state.updateLayerProperty);
     const addKeyframe = useStore((state) => state.addKeyframe);
 
     // Manipulation State
     const [dragState, setDragState] = useState<{
-        type: 'move' | 'scale' | 'rotate' | 'pen_bezier' | 'vertex_move',
+        type: 'move' | 'scale' | 'rotate' | 'pen_bezier' | 'vertex_move' | 'shape_move' | 'shape_scale',
         handle?: 'tl' | 'tr' | 'bl' | 'br',
         startMouse: [number, number],
-        startVal: any, // [x, y, z] or number
+        startVal: any,
         initialAngle?: number,
         layerId?: number,
+        shapePath?: string | null,
         pathData?: { path: string, vertexIdx: number, handleType: 'v' | 'i' | 'o' }
     } | null>(null);
 
-    const [hoverIntent, setHoverIntent] = useState<'move' | 'scale' | 'rotate' | 'vertex_move' | 'none'>('none');
+    const [hoverIntent, setHoverIntent] = useState<'move' | 'scale' | 'rotate' | 'vertex_move' | 'shape_move' | 'shape_scale' | 'none'>('none');
     const [activeHandle, setActiveHandle] = useState<'tl' | 'tr' | 'bl' | 'br' | null>(null);
 
     // Pen Tool State
@@ -322,6 +325,92 @@ export function Viewport() {
         return paths;
     }, [getVal]);
 
+    const getSelectedShapeInfo = useCallback(() => {
+        if (!selectedLayer || !selectedShapePath) return null;
+
+        let accumulatedTransform = { p: [0, 0] as [number, number], s: [100, 100] as [number, number], r: 0 };
+        const pathParts = selectedShapePath.split('.');
+        let current: any = selectedLayer;
+        let currentPath = '';
+
+        // Traverse to find transform
+        for (let i = 0; i < pathParts.length; i++) {
+            const part = pathParts[i];
+            currentPath = currentPath ? `${currentPath}.${part}` : part;
+            current = current[part];
+
+            if (current && current.ty === 'gr') {
+                const groupTr = current.it.find((it: any) => it.ty === 'tr');
+                if (groupTr) {
+                    const p = getVal<[number, number, number]>(groupTr.p);
+                    const s = getVal<[number, number, number]>(groupTr.s);
+                    const r = getVal<number>(groupTr.r);
+                    accumulatedTransform = {
+                        p: [accumulatedTransform.p[0] + p[0], accumulatedTransform.p[1] + p[1]],
+                        s: [accumulatedTransform.s[0] * (s[0] / 100), accumulatedTransform.s[1] * (s[1] / 100)],
+                        r: accumulatedTransform.r + r
+                    };
+                }
+            }
+        }
+
+        // Calculate local bounds of the selected item
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+
+        const processItemBounds = (item: any, transform: any) => {
+            if (item.ty === 'gr' && item.it) {
+                let innerTransform = { ...transform };
+                const groupTr = item.it.find((it: any) => it.ty === 'tr');
+                if (groupTr) {
+                    const p = getVal<[number, number, number]>(groupTr.p);
+                    const s = getVal<[number, number, number]>(groupTr.s);
+                    const r = getVal<number>(groupTr.r);
+                    innerTransform = {
+                        p: [transform.p[0] + p[0], transform.p[1] + p[1]],
+                        s: [transform.s[0] * (s[0] / 100), transform.s[1] * (s[1] / 100)],
+                        r: transform.r + r
+                    };
+                }
+                item.it.forEach((it: any) => processItemBounds(it, innerTransform));
+            } else if (item.ty === 'rc' || item.ty === 'el') {
+                const size = getVal<[number, number, number]>(item.s);
+                const pos = getVal<[number, number, number]>(item.p || { a: 0, k: [0, 0, 0] });
+                const localX = pos[0] + transform.p[0];
+                const localY = pos[1] + transform.p[1];
+                const w = size[0] * (transform.s[0] / 100);
+                const h = size[1] * (transform.s[1] / 100);
+                minX = Math.min(minX, localX - w / 2); maxX = Math.max(maxX, localX + w / 2);
+                minY = Math.min(minY, localY - h / 2); maxY = Math.max(maxY, localY + h / 2);
+            } else if (item.ty === 'sh') {
+                const ks = getVal<any>(item.ks);
+                if (ks && ks.v) {
+                    ks.v.forEach((v: [number, number]) => {
+                        const tx = v[0] * (transform.s[0] / 100) + transform.p[0];
+                        const ty = v[1] * (transform.s[1] / 100) + transform.p[1];
+                        minX = Math.min(minX, tx); maxX = Math.max(maxX, tx);
+                        minY = Math.min(minY, ty); maxY = Math.max(maxY, ty);
+                    });
+                }
+            }
+        };
+
+        processItemBounds(current, { p: [0, 0], s: [100, 100], r: 0 });
+
+        if (minX === Infinity) return { item: current, transform: accumulatedTransform, bounds: { width: 100, height: 100, offsetX: 0, offsetY: 0 }, path: selectedShapePath };
+
+        return {
+            item: current,
+            transform: accumulatedTransform,
+            bounds: {
+                width: maxX - minX,
+                height: maxY - minY,
+                offsetX: (minX + maxX) / 2,
+                offsetY: (minY + maxY) / 2
+            },
+            path: selectedShapePath
+        };
+    }, [selectedLayer, selectedShapePath, getVal]);
+
     const getManipulationIntent = useCallback((x: number, y: number) => {
         if (!selectedLayer || activeTool !== 'select') return { type: 'none' as const };
 
@@ -341,11 +430,9 @@ export function Viewport() {
                 const vx = ks.v[i][0] * (lscale[0] / 100) + lpos[0];
                 const vy = ks.v[i][1] * (lscale[1] / 100) + lpos[1];
 
-                // Check vertex
                 const distV = Math.sqrt(Math.pow(x - vx, 2) + Math.pow(y - vy, 2));
                 if (distV < 15) return { type: 'vertex_move' as const, pathData: { path: p.path, vertexIdx: i, handleType: 'v' as const } };
 
-                // Check in-handle
                 if (ks.i && ks.i[i]) {
                     const ix = (ks.v[i][0] + ks.i[i][0]) * (lscale[0] / 100) + lpos[0];
                     const iy = (ks.v[i][1] + ks.i[i][1]) * (lscale[1] / 100) + lpos[1];
@@ -354,7 +441,6 @@ export function Viewport() {
                     }
                 }
 
-                // Check out-handle
                 if (ks.o && ks.o[i]) {
                     const ox = (ks.v[i][0] + ks.o[i][0]) * (lscale[0] / 100) + lpos[0];
                     const oy = (ks.v[i][1] + ks.o[i][1]) * (lscale[1] / 100) + lpos[1];
@@ -362,6 +448,47 @@ export function Viewport() {
                         return { type: 'vertex_move' as const, pathData: { path: p.path, vertexIdx: i, handleType: 'o' as const } };
                     }
                 }
+            }
+        }
+        const shapeInfo = getSelectedShapeInfo();
+        const rotation = getVal<number>(selectedLayer.ks.r) || 0;
+
+        if (shapeInfo) {
+            const sw = shapeInfo.bounds.width * (scale[0] / 100) * (shapeInfo.transform.s[0] / 100);
+            const sh = shapeInfo.bounds.height * (scale[1] / 100) * (shapeInfo.transform.s[1] / 100);
+            const padding = 16;
+            const spw = sw + padding;
+            const sph = sh + padding;
+            const scx = pos[0] + shapeInfo.transform.p[0] + (shapeInfo.bounds.offsetX * shapeInfo.transform.s[0] / 100);
+            const scy = pos[1] + shapeInfo.transform.p[1] + (shapeInfo.bounds.offsetY * shapeInfo.transform.s[1] / 100);
+
+            const rotate = (px: number, py: number, cx: number, cy: number, ang: number) => {
+                const s = Math.sin(ang * Math.PI / 180);
+                const c = Math.cos(ang * Math.PI / 180);
+                const dx = px - cx;
+                const dy = py - cy;
+                return [
+                    dx * c - dy * s + cx,
+                    dx * s + dy * c + cy
+                ];
+            };
+
+            const rotationTotal = rotation + shapeInfo.transform.r;
+            const hlocs = {
+                tl: rotate(scx - spw / 2, scy - sph / 2, scx, scy, rotationTotal),
+                tr: rotate(scx + spw / 2, scy - sph / 2, scx, scy, rotationTotal),
+                bl: rotate(scx - spw / 2, scy + sph / 2, scx, scy, rotationTotal),
+                br: rotate(scx + spw / 2, scy + sph / 2, scx, scy, rotationTotal)
+            };
+
+            for (const [key, h] of Object.entries(hlocs)) {
+                if (Math.sqrt(Math.pow(x - h[0], 2) + Math.pow(y - h[1], 2)) < 20) {
+                    return { type: 'shape_scale' as const, handle: key as any, shapePath: selectedShapePath };
+                }
+            }
+
+            if (x > scx - spw / 2 && x < scx + spw / 2 && y > scy - sph / 2 && y < scy + sph / 2) {
+                return { type: 'shape_move' as const, shapePath: selectedShapePath };
             }
         }
 
@@ -462,6 +589,20 @@ export function Viewport() {
                     layerId: selectedLayer.ind,
                     pathData: intent.pathData
                 });
+            }
+        } else if (intent.type === 'shape_move') {
+            const shapeInfo = getSelectedShapeInfo();
+            if (shapeInfo && shapeInfo.item) {
+                const tr = shapeInfo.item.tr || shapeInfo.item.p;
+                const startVal = getVal<number[]>(tr ? (shapeInfo.item.tr ? tr.p : tr) : { k: [0, 0] });
+                setDragState({ type: 'shape_move', startMouse: [x, y], startVal: [...startVal], shapePath: intent.shapePath, layerId: selectedLayer.ind });
+            }
+        } else if (intent.type === 'shape_scale') {
+            const shapeInfo = getSelectedShapeInfo();
+            if (shapeInfo && shapeInfo.item) {
+                const tr = shapeInfo.item.tr || shapeInfo.item.s;
+                const startVal = getVal<number[]>(tr ? (shapeInfo.item.tr ? tr.s : tr) : { k: [100, 100] });
+                setDragState({ type: 'shape_scale', handle: intent.handle, startMouse: [x, y], startVal: [...startVal], shapePath: intent.shapePath, layerId: selectedLayer.ind });
             }
         }
     };
@@ -564,19 +705,50 @@ export function Viewport() {
                 }
 
                 if (p.ks.a === 1) {
-                    addKeyframe(selectedLayer.ind, p.path, currentTime, ks);
+                    addKeyframe(selectedLayer.ind, dragState.pathData.path, currentTime, ks);
                 } else {
-                    // deep update
-                    const newLayer = JSON.parse(JSON.stringify(selectedLayer));
-                    const pathParts = p.path.split('.');
-                    let current = newLayer;
-                    for (let i = 0; i < pathParts.length - 1; i++) current = current[pathParts[i]];
-                    current[pathParts[pathParts.length - 1]].k = ks;
-                    updateLayer(selectedLayer.ind, newLayer);
+                    updateLayerProperty(selectedLayer.ind, dragState.pathData.path, ks);
+                }
+            }
+        } else if (dragState.type === 'shape_move' && selectedLayer && dragState.shapePath) {
+            const newVal = [dragState.startVal[0] + dx, dragState.startVal[1] + dy];
+            const shapeInfo = getSelectedShapeInfo();
+            if (shapeInfo && shapeInfo.item) {
+                const isGroup = shapeInfo.item.ty === 'gr';
+                const propPath = isGroup ? `${dragState.shapePath}.it.${shapeInfo.item.it.findIndex((it: any) => it.ty === 'tr')}.p` : `${dragState.shapePath}.p`;
+                const currentProp = isGroup ? shapeInfo.item.it.find((it: any) => it.ty === 'tr')?.p : shapeInfo.item.p;
+
+                if (currentProp && currentProp.a === 1) {
+                    addKeyframe(selectedLayer.ind, propPath, currentTime, newVal);
+                } else {
+                    updateLayerProperty(selectedLayer.ind, propPath, newVal);
+                }
+            }
+        } else if (dragState.type === 'shape_scale' && selectedLayer && dragState.shapePath && dragState.handle) {
+            const shapeInfo = getSelectedShapeInfo();
+            if (shapeInfo && shapeInfo.item) {
+                const pos = getVal<[number, number, number]>(selectedLayer.ks.p);
+                const scx = pos[0] + shapeInfo.transform.p[0] + (shapeInfo.bounds.offsetX * shapeInfo.transform.s[0] / 100);
+                const scy = pos[1] + shapeInfo.transform.p[1] + (shapeInfo.bounds.offsetY * shapeInfo.transform.s[1] / 100);
+
+                const startDist = Math.sqrt(Math.pow(dragState.startMouse[0] - scx, 2) + Math.pow(dragState.startMouse[1] - scy, 2));
+                const currentDist = Math.sqrt(Math.pow(x - scx, 2) + Math.pow(y - scy, 2));
+                if (startDist > 1) {
+                    const ratio = currentDist / startDist;
+                    const newVal = [dragState.startVal[0] * ratio, dragState.startVal[1] * ratio];
+                    const isGroup = shapeInfo.item.ty === 'gr';
+                    const propPath = isGroup ? `${dragState.shapePath}.it.${shapeInfo.item.it.findIndex((it: any) => it.ty === 'tr')}.s` : `${dragState.shapePath}.s`;
+                    const currentProp = isGroup ? shapeInfo.item.it.find((it: any) => it.ty === 'tr')?.s : shapeInfo.item.s;
+
+                    if (currentProp && currentProp.a === 1) {
+                        addKeyframe(selectedLayer.ind, propPath, currentTime, [...newVal, 100]);
+                    } else {
+                        updateLayerProperty(selectedLayer.ind, propPath, [...newVal, 100]);
+                    }
                 }
             }
         }
-    }, [dragState, selectedLayer, currentTime, addKeyframe, updateLayer, getVal, getManipulationIntent, activeTool, getAllPaths]);
+    }, [dragState, selectedLayer, currentTime, addKeyframe, updateLayer, updateLayerProperty, getVal, getManipulationIntent, activeTool, getAllPaths, getSelectedShapeInfo]);
 
     const handleMouseUp = useCallback(() => setDragState(null), []);
 
@@ -618,18 +790,24 @@ export function Viewport() {
 
         const paths = getAllPaths(selectedLayer);
 
+        const padding = 16;
+        const pw = w + padding * 2;
+        const ph = h + padding * 2;
+
+        const shapeInfo = getSelectedShapeInfo();
+
         return (
             <svg className="absolute inset-0 w-full h-full pointer-events-none overflow-visible z-40" viewBox="0 0 1920 1080">
+                {/* Layer Gizmo */}
                 <g transform={`translate(${pos[0] + ox}, ${pos[1] + oy}) rotate(${rotation || 0})`}>
-                    <rect x={-w / 2} y={-h / 2} width={w} height={h} fill="none" stroke="#3b82f6" strokeWidth="2" strokeDasharray="4 2" />
-                    {/* Handles */}
-                    {[[-w / 2, -h / 2, 'tl'], [w / 2, -h / 2, 'tr'], [-w / 2, h / 2, 'bl'], [w / 2, h / 2, 'br']].map(([hx, hy, id]) => (
+                    <rect x={-pw / 2} y={-ph / 2} width={pw} height={ph} fill="none" stroke="#3b82f6" strokeWidth="1" strokeDasharray="4 2" opacity={selectedShapePath ? 0.3 : 1} />
+                    {!selectedShapePath && [[-pw / 2, -ph / 2, 'tl'], [pw / 2, -ph / 2, 'tr'], [-pw / 2, ph / 2, 'bl'], [pw / 2, ph / 2, 'br']].map(([hx, hy, id]) => (
                         <rect
                             key={id as string}
-                            x={(hx as number) - 8}
-                            y={(hy as number) - 8}
-                            width="16"
-                            height="16"
+                            x={(hx as number) - 6}
+                            y={(hy as number) - 6}
+                            width="12"
+                            height="12"
                             fill="white"
                             stroke="#3b82f6"
                             strokeWidth="2"
@@ -637,6 +815,36 @@ export function Viewport() {
                         />
                     ))}
                 </g>
+
+                {/* Sub-Shape Gizmo */}
+                {shapeInfo && (
+                    <g transform={`translate(${pos[0] + shapeInfo.transform.p[0] + (shapeInfo.bounds.offsetX * shapeInfo.transform.s[0] / 100)}, ${pos[1] + shapeInfo.transform.p[1] + (shapeInfo.bounds.offsetY * shapeInfo.transform.s[1] / 100)}) rotate(${rotation + shapeInfo.transform.r})`}>
+                        {(() => {
+                            const sw = shapeInfo.bounds.width * (scale[0] / 100) * (shapeInfo.transform.s[0] / 100);
+                            const sh = shapeInfo.bounds.height * (scale[1] / 100) * (shapeInfo.transform.s[1] / 100);
+                            const spw = sw + padding;
+                            const sph = sh + padding;
+                            return (
+                                <>
+                                    <rect x={-spw / 2} y={-sph / 2} width={spw} height={sph} fill="none" stroke="#a855f7" strokeWidth="2" />
+                                    {[[-spw / 2, -sph / 2, 'tl'], [spw / 2, -sph / 2, 'tr'], [-spw / 2, sph / 2, 'bl'], [spw / 2, sph / 2, 'br']].map(([hx, hy, id]) => (
+                                        <rect
+                                            key={id as string}
+                                            x={(hx as number) - 5}
+                                            y={(hy as number) - 5}
+                                            width="10"
+                                            height="10"
+                                            fill="white"
+                                            stroke="#a855f7"
+                                            strokeWidth="2"
+                                            className="pointer-events-auto"
+                                        />
+                                    ))}
+                                </>
+                            );
+                        })()}
+                    </g>
+                )}
 
                 {/* Path Vertices (Rendered globally for easier coordinate handling) */}
                 {paths.map((p, pIdx) => {

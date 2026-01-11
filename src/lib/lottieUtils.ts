@@ -145,7 +145,7 @@ export const saveDotLottie = async (animation: LottieAnimation): Promise<Blob> =
 
         fflate.zip(files, (err, data) => {
             if (err) throw err;
-            resolve(new Blob([data], { type: 'application/zip' }));
+            resolve(new Blob([data as any], { type: 'application/zip' }));
         });
     });
 };
