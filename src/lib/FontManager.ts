@@ -56,7 +56,6 @@ export class FontManager {
         // Let's try to find a direct .ttf URL. 
         // Example: https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1Mu4mxK.ttf
 
-        const url = `https://fonts.gstatic.com/s/${family.toLowerCase().replace(/ /g, '')}/v1/regular.ttf`;
         // WARNING: This URL structure might be too simplistic and fail for most fonts.
         // A better way is to parse the CSS from Google Fonts to get the src url.
 
