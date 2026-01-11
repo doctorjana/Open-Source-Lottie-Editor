@@ -1,73 +1,65 @@
-# React + TypeScript + Vite
+# Open Source Lottie Editor
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A powerful, web-based Lottie editor built with React, TypeScript, and Vite. This tool allows you to create, edit, and export Lottie animations directly in your browser.
 
-Currently, two official plugins are available:
+## Live Demo
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+[**Try the Editor Live**](https://doctorjana.github.io/Open-Source-Lottie-Editor/)
 
-## React Compiler
+## Features
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### 🛠 Tools
+- **Selection Tool (V)**: Move, scale, and rotate layers and shapes.
+- **Pen Tool (G)**: Draw custom paths with bezier curves.
+- **Text Tool (T)**: Add and edit text layers.
+- **Shape Tools**:
+  - **Rectangle Tool (R)**
+  - **Ellipse Tool (O)**
+  - **Star Tool**
+  - **Polygon Tool**
 
-## Expanding the ESLint configuration
+### 🎨 Manipulation & Editing
+- **Transform**: Precise control over Position, Scale, and Rotation.
+- **Vertex Editing**: Edit individual path points and bezier handles.
+- **Grouping**: Organize shapes into groups.
+- **Fill & Stroke**: Customize colors and stroke properties.
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### 🎬 Animation & Timeline
+- **Playback Controls**: Play, pause, and scrub through the timeline.
+- **Keyframe Management**: (In progress) Add and manage keyframes for animations.
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+### 💾 Import & Export
+- **Import**:
+  - `.json` (Lottie JSON)
+  - `.lottie` (DotLottie)
+- **Export**:
+  - **Lottie JSON**: Standard `.json` file.
+  - **DotLottie**: Compressed `.lottie` file.
+  - **Video**: Export as `.mp4` or `.webm`.
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+## Getting Started
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/doctorjana/Open-Source-Lottie-Editor.git
+   ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+3. **Start the development server**
+   ```bash
+   npm run dev
+   ```
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+## Built With
+
+- [React](https://react.dev/)
+- [TypeScript](https://www.typescriptlang.org/)
+- [Vite](https://vitejs.dev/)
+- [Tailwind CSS](https://tailwindcss.com/)
+- [Lottie-Web](https://github.com/airbnb/lottie-web)
+- [React Resizable Panels](https://github.com/bvaughn/react-resizable-panels)
+- [Zustand](https://github.com/pmndrs/zustand)
