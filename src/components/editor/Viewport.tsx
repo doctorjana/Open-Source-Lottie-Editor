@@ -19,6 +19,8 @@ export function Viewport() {
     const updateLayer = useStore((state) => state.updateLayer);
     const updateLayerProperty = useStore((state) => state.updateLayerProperty);
     const addKeyframe = useStore((state) => state.addKeyframe);
+    const deleteVertex = useStore((state) => state.deleteVertex);
+    const addVertex = useStore((state) => state.addVertex);
 
     // Manipulation State
     const [dragState, setDragState] = useState<{
@@ -111,8 +113,8 @@ export function Viewport() {
     const getCanvasCoords = (e: MouseEvent | React.MouseEvent): [number, number] => {
         const rect = containerRef.current?.getBoundingClientRect();
         if (!rect) return [0, 0];
-        const scaleX = 1920 / rect.width;
-        const scaleY = 1080 / rect.height;
+        const scaleX = animationData.w / rect.width;
+        const scaleY = animationData.h / rect.height;
         return [(e.clientX - rect.left) * scaleX, (e.clientY - rect.top) * scaleY];
     };
 
@@ -227,7 +229,7 @@ export function Viewport() {
             nm: "Pen Path Layer",
             ks: {
                 o: { a: 0, k: 100 },
-                p: { a: 0, k: [960, 540, 0] as [number, number, number] },
+                p: { a: 0, k: [animationData.w / 2, animationData.h / 2, 0] as [number, number, number] },
                 s: { a: 0, k: [100, 100, 100] as [number, number, number] },
                 r: { a: 0, k: 0 },
                 a: { a: 0, k: [0, 0, 0] as [number, number, number] },
@@ -247,7 +249,7 @@ export function Viewport() {
                             k: {
                                 i: penPoints.map(p => p.i),
                                 o: penPoints.map(p => p.o),
-                                v: penPoints.map(p => [p.v[0] - 960, p.v[1] - 540]),
+                                v: penPoints.map(p => [p.v[0] - animationData.w / 2, p.v[1] - animationData.h / 2]),
                                 c: closed
                             }
                         }
@@ -419,32 +421,38 @@ export function Viewport() {
 
         // 0. Check vertices first (highest priority)
         const paths = getAllPaths(selectedLayer);
+        const anchor = getVal<[number, number, number]>(selectedLayer.ks.a);
+
         for (const p of paths) {
             const ks = getVal<any>(p.ks);
             if (!ks || !ks.v) continue;
 
             const lscale = [p.transform.s[0] * (scale[0] / 100), p.transform.s[1] * (scale[1] / 100)];
-            const lpos = [p.transform.p[0] + pos[0], p.transform.p[1] + pos[1]];
+            // Subtract anchor point for correct positioning
+            const lpos = [p.transform.p[0] + pos[0] - anchor[0], p.transform.p[1] + pos[1] - anchor[1]];
 
             for (let i = 0; i < ks.v.length; i++) {
                 const vx = ks.v[i][0] * (lscale[0] / 100) + lpos[0];
                 const vy = ks.v[i][1] * (lscale[1] / 100) + lpos[1];
 
+                // Vertex hit detection - larger radius for easier clicking
                 const distV = Math.sqrt(Math.pow(x - vx, 2) + Math.pow(y - vy, 2));
-                if (distV < 15) return { type: 'vertex_move' as const, pathData: { path: p.path, vertexIdx: i, handleType: 'v' as const } };
+                if (distV < 25) return { type: 'vertex_move' as const, pathData: { path: p.path, vertexIdx: i, handleType: 'v' as const } };
 
+                // In-tangent handle hit detection
                 if (ks.i && ks.i[i]) {
                     const ix = (ks.v[i][0] + ks.i[i][0]) * (lscale[0] / 100) + lpos[0];
                     const iy = (ks.v[i][1] + ks.i[i][1]) * (lscale[1] / 100) + lpos[1];
-                    if (Math.sqrt(Math.pow(x - ix, 2) + Math.pow(y - iy, 2)) < 12) {
+                    if (Math.sqrt(Math.pow(x - ix, 2) + Math.pow(y - iy, 2)) < 20) {
                         return { type: 'vertex_move' as const, pathData: { path: p.path, vertexIdx: i, handleType: 'i' as const } };
                     }
                 }
 
+                // Out-tangent handle hit detection
                 if (ks.o && ks.o[i]) {
                     const ox = (ks.v[i][0] + ks.o[i][0]) * (lscale[0] / 100) + lpos[0];
                     const oy = (ks.v[i][1] + ks.o[i][1]) * (lscale[1] / 100) + lpos[1];
-                    if (Math.sqrt(Math.pow(x - ox, 2) + Math.pow(y - oy, 2)) < 12) {
+                    if (Math.sqrt(Math.pow(x - ox, 2) + Math.pow(y - oy, 2)) < 20) {
                         return { type: 'vertex_move' as const, pathData: { path: p.path, vertexIdx: i, handleType: 'o' as const } };
                     }
                 }
@@ -534,7 +542,120 @@ export function Viewport() {
     const handleMouseDown = (e: React.MouseEvent) => {
         const [x, y] = getCanvasCoords(e);
 
+        // Pen Tool: Either draw new path OR edit existing paths on selected layer
         if (activeTool === 'pen') {
+            // If we have a selected layer with paths, enable vertex editing
+            if (selectedLayer) {
+                const paths = getAllPaths(selectedLayer);
+                const pos = getVal<[number, number, number]>(selectedLayer.ks.p);
+                const scale = getVal<[number, number, number]>(selectedLayer.ks.s);
+                const anchor = getVal<[number, number, number]>(selectedLayer.ks.a);
+
+                for (const p of paths) {
+                    const ks = getVal<any>(p.ks);
+                    if (!ks || !ks.v) continue;
+
+                    const lscale = [p.transform.s[0] * (scale[0] / 100), p.transform.s[1] * (scale[1] / 100)];
+                    const lpos = [p.transform.p[0] + pos[0] - anchor[0], p.transform.p[1] + pos[1] - anchor[1]];
+
+                    // Check if clicking on an existing vertex (for deletion with Alt key)
+                    if (e.altKey) {
+                        for (let i = 0; i < ks.v.length; i++) {
+                            const vx = ks.v[i][0] * (lscale[0] / 100) + lpos[0];
+                            const vy = ks.v[i][1] * (lscale[1] / 100) + lpos[1];
+                            const dist = Math.sqrt(Math.pow(x - vx, 2) + Math.pow(y - vy, 2));
+                            if (dist < 25 && ks.v.length > 2) {
+                                deleteVertex(selectedLayer.ind, p.path, i);
+                                return;
+                            }
+                        }
+                    } else {
+                        // Check if clicking near a vertex (for dragging) - handled by select tool logic
+                        for (let i = 0; i < ks.v.length; i++) {
+                            const vx = ks.v[i][0] * (lscale[0] / 100) + lpos[0];
+                            const vy = ks.v[i][1] * (lscale[1] / 100) + lpos[1];
+                            const dist = Math.sqrt(Math.pow(x - vx, 2) + Math.pow(y - vy, 2));
+                            if (dist < 25) {
+                                // Start vertex drag
+                                setDragState({
+                                    type: 'vertex_move',
+                                    startMouse: [x, y],
+                                    startVal: [...ks.v[i]],
+                                    layerId: selectedLayer.ind,
+                                    pathData: { path: p.path, vertexIdx: i, handleType: 'v' as const }
+                                });
+                                return;
+                            }
+
+                            // Check bezier handles
+                            if (ks.i && ks.i[i]) {
+                                const ix = (ks.v[i][0] + ks.i[i][0]) * (lscale[0] / 100) + lpos[0];
+                                const iy = (ks.v[i][1] + ks.i[i][1]) * (lscale[1] / 100) + lpos[1];
+                                if (Math.sqrt(Math.pow(x - ix, 2) + Math.pow(y - iy, 2)) < 20) {
+                                    setDragState({
+                                        type: 'vertex_move',
+                                        startMouse: [x, y],
+                                        startVal: [...ks.i[i]],
+                                        layerId: selectedLayer.ind,
+                                        pathData: { path: p.path, vertexIdx: i, handleType: 'i' as const }
+                                    });
+                                    return;
+                                }
+                            }
+
+                            if (ks.o && ks.o[i]) {
+                                const ox = (ks.v[i][0] + ks.o[i][0]) * (lscale[0] / 100) + lpos[0];
+                                const oy = (ks.v[i][1] + ks.o[i][1]) * (lscale[1] / 100) + lpos[1];
+                                if (Math.sqrt(Math.pow(x - ox, 2) + Math.pow(y - oy, 2)) < 20) {
+                                    setDragState({
+                                        type: 'vertex_move',
+                                        startMouse: [x, y],
+                                        startVal: [...ks.o[i]],
+                                        layerId: selectedLayer.ind,
+                                        pathData: { path: p.path, vertexIdx: i, handleType: 'o' as const }
+                                    });
+                                    return;
+                                }
+                            }
+                        }
+
+                        // Find the closest edge and add a point on it
+                        let closestEdge = -1;
+                        let closestDist = Infinity;
+
+                        for (let i = 0; i < ks.v.length; i++) {
+                            const nextIdx = (i + 1) % ks.v.length;
+                            if (!ks.c && nextIdx === 0) continue; // Skip last-to-first for open paths
+
+                            const v1x = ks.v[i][0] * (lscale[0] / 100) + lpos[0];
+                            const v1y = ks.v[i][1] * (lscale[1] / 100) + lpos[1];
+                            const v2x = ks.v[nextIdx][0] * (lscale[0] / 100) + lpos[0];
+                            const v2y = ks.v[nextIdx][1] * (lscale[1] / 100) + lpos[1];
+
+                            // Distance from point to line segment
+                            const dx = v2x - v1x;
+                            const dy = v2y - v1y;
+                            const t = Math.max(0, Math.min(1, ((x - v1x) * dx + (y - v1y) * dy) / (dx * dx + dy * dy)));
+                            const projX = v1x + t * dx;
+                            const projY = v1y + t * dy;
+                            const dist = Math.sqrt(Math.pow(x - projX, 2) + Math.pow(y - projY, 2));
+
+                            if (dist < closestDist) {
+                                closestDist = dist;
+                                closestEdge = i;
+                            }
+                        }
+
+                        // If close enough to an edge, add a vertex
+                        if (closestDist < 50 && closestEdge >= 0) {
+                            addVertex(selectedLayer.ind, p.path, closestEdge);
+                            return;
+                        }
+                    }
+                }
+            }
+
+            // No vertex interaction - proceed with drawing new path
             if (penPoints.length > 2) {
                 const first = penPoints[0].v;
                 const dist = Math.sqrt(Math.pow(x - first[0], 2) + Math.pow(y - first[1], 2));
@@ -776,7 +897,7 @@ export function Viewport() {
     }, [activeTool, finishPath]);
 
     const renderGizmo = () => {
-        if (!selectedLayer || activeTool !== 'select') return null;
+        if (!selectedLayer || (activeTool !== 'select' && activeTool !== 'pen')) return null;
 
         const pos = getVal<[number, number, number]>(selectedLayer.ks.p);
         const scale = getVal<[number, number, number]>(selectedLayer.ks.s);
@@ -797,7 +918,7 @@ export function Viewport() {
         const shapeInfo = getSelectedShapeInfo();
 
         return (
-            <svg className="absolute inset-0 w-full h-full pointer-events-none overflow-visible z-40" viewBox="0 0 1920 1080">
+            <svg className="absolute inset-0 w-full h-full pointer-events-none overflow-visible z-40" viewBox={`0 0 ${animationData.w} ${animationData.h}`}>
                 {/* Layer Gizmo */}
                 <g transform={`translate(${pos[0] + ox}, ${pos[1] + oy}) rotate(${rotation || 0})`}>
                     <rect x={-pw / 2} y={-ph / 2} width={pw} height={ph} fill="none" stroke="#3b82f6" strokeWidth="1" strokeDasharray="4 2" opacity={selectedShapePath ? 0.3 : 1} />
@@ -851,8 +972,15 @@ export function Viewport() {
                     const ks = getVal<any>(p.ks);
                     if (!ks || !ks.v) return null;
 
+                    // Get layer anchor point to correctly offset vertices
+                    const anchor = getVal<[number, number, number]>(selectedLayer.ks.a);
+
                     const lscale = [p.transform.s[0] * (scale[0] / 100), p.transform.s[1] * (scale[1] / 100)];
-                    const lpos = [p.transform.p[0] + pos[0], p.transform.p[1] + pos[1]];
+                    // Subtract anchor point and add layer position
+                    const lpos = [
+                        p.transform.p[0] + pos[0] - anchor[0],
+                        p.transform.p[1] + pos[1] - anchor[1]
+                    ];
 
                     return (
                         <g key={pIdx}>
@@ -868,25 +996,27 @@ export function Viewport() {
 
                                 return (
                                     <g key={vIdx}>
-                                        {/* Handle Lines */}
-                                        <line x1={ix} y1={iy} x2={vx} y2={vy} stroke="purple" strokeWidth="1" strokeDasharray="2 2" opacity="0.5" />
-                                        <line x1={ox} y1={oy} x2={vx} y2={vy} stroke="purple" strokeWidth="1" strokeDasharray="2 2" opacity="0.5" />
+                                        {/* Handle Lines - thicker for visibility */}
+                                        <line x1={ix} y1={iy} x2={vx} y2={vy} stroke="#a855f7" strokeWidth="2" opacity="0.6" />
+                                        <line x1={ox} y1={oy} x2={vx} y2={vy} stroke="#a855f7" strokeWidth="2" opacity="0.6" />
 
-                                        {/* In-handle */}
-                                        <circle cx={ix} cy={iy} r="4" fill="white" stroke="purple" strokeWidth="1" className="pointer-events-auto cursor-pointer" />
+                                        {/* In-handle - larger and more visible */}
+                                        <circle cx={ix} cy={iy} r="8" fill="#fbbf24" stroke="#92400e" strokeWidth="2" className="pointer-events-auto cursor-pointer" style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))' }} />
 
-                                        {/* Out-handle */}
-                                        <circle cx={ox} cy={oy} r="4" fill="white" stroke="purple" strokeWidth="1" className="pointer-events-auto cursor-pointer" />
+                                        {/* Out-handle - larger and more visible */}
+                                        <circle cx={ox} cy={oy} r="8" fill="#22d3ee" stroke="#155e75" strokeWidth="2" className="pointer-events-auto cursor-pointer" style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))' }} />
 
-                                        {/* Vertex */}
-                                        <circle
-                                            cx={vx}
-                                            cy={vy}
-                                            r="6"
+                                        {/* Vertex - significantly larger */}
+                                        <rect
+                                            x={vx - 7}
+                                            y={vy - 7}
+                                            width="14"
+                                            height="14"
                                             fill="white"
-                                            stroke="purple"
-                                            strokeWidth="2"
+                                            stroke="#a855f7"
+                                            strokeWidth="3"
                                             className="pointer-events-auto cursor-pointer"
+                                            style={{ filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.4))' }}
                                         />
                                     </g>
                                 );
@@ -927,10 +1057,10 @@ export function Viewport() {
 
             <div
                 ref={containerRef}
-                className="w-[80%] h-[80%] max-w-[1920px] max-h-[1080px] shadow-2xl bg-white relative overflow-hidden"
+                className="w-[80%] h-[80%] shadow-2xl bg-white relative overflow-hidden"
                 onMouseDown={handleMouseDown}
                 onDoubleClick={() => activeTool === 'pen' && finishPath(false)}
-                style={{ cursor: getCursor() }}
+                style={{ cursor: getCursor(), aspectRatio: `${animationData.w} / ${animationData.h}`, maxWidth: '100%', maxHeight: '100%' }}
             >
                 {/* Dedicated Lottie Container */}
                 <div ref={lottieRef} className="absolute inset-0 pointer-events-none" />
@@ -942,7 +1072,7 @@ export function Viewport() {
                     {activeTool === 'pen' && penPoints.length > 0 && (
                         <svg
                             className="absolute inset-0 w-full h-full z-50 overflow-visible pointer-events-none"
-                            viewBox="0 0 1920 1080"
+                            viewBox={`0 0 ${animationData.w} ${animationData.h}`}
                         >
                             <path
                                 d={penPoints.reduce((acc, p, i) => {

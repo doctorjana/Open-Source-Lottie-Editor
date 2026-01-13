@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { type LottieAnimation, type Layer, createDefaultAnimation } from '../types/lottie';
 import { FontManager } from '../lib/FontManager';
 import { toVector3, toVector2 } from '../lib/lottieUtils';
+import { useHistory } from './useHistory';
 
 interface EditorState {
     animation: LottieAnimation;
@@ -32,7 +33,15 @@ interface EditorState {
     syncTextToShapes: (layerInd: number) => Promise<void>;
     convertToPath: (layerInd: number, shapePath: string) => void;
     deleteShape: (layerInd: number, shapePath: string) => void;
+    deleteVertex: (layerInd: number, shapePath: string, vertexIndex: number) => void;
+    addVertex: (layerInd: number, shapePath: string, afterIndex: number) => void;
     selectShape: (path: string | null) => void;
+    addIconLayer: (iconName: string, preset: 'draw-in' | 'scale-in' | 'fade-in') => Promise<void>;
+    setCanvasSize: (width: number, height: number) => void;
+
+    // Undo/Redo
+    undo: () => void;
+    redo: () => void;
 }
 
 export const useStore = create<EditorState>((set) => ({
@@ -52,6 +61,7 @@ export const useStore = create<EditorState>((set) => ({
     },
 
     updateLayer: (ind, layerUpdate) => set((state) => {
+        useHistory.getState().pushState(state.animation);
         const newLayers = state.animation.layers.map((layer) => {
             if (layer.ind === ind) {
                 return { ...layer, ...layerUpdate };
@@ -61,14 +71,17 @@ export const useStore = create<EditorState>((set) => ({
         return { animation: { ...state.animation, layers: newLayers } };
     }),
 
-    addLayer: (layer) => set((state) => ({
-        animation: {
-            ...state.animation,
-            layers: [layer, ...state.animation.layers]
-        },
-        selectedLayerId: layer.ind,
-        activeTool: 'select'
-    })),
+    addLayer: (layer) => set((state) => {
+        useHistory.getState().pushState(state.animation);
+        return {
+            animation: {
+                ...state.animation,
+                layers: [layer, ...state.animation.layers]
+            },
+            selectedLayerId: layer.ind,
+            activeTool: 'select'
+        };
+    }),
 
     addTextLayer: (text) => set((state) => {
         const ind = Date.now();
@@ -81,7 +94,7 @@ export const useStore = create<EditorState>((set) => ({
             fontSize: 48,
             ks: {
                 o: { a: 0, k: 100 },
-                p: { a: 0, k: [960, 540, 0] },
+                p: { a: 0, k: [state.animation.w / 2, state.animation.h / 2, 0] },
                 s: { a: 0, k: [100, 100, 100] },
                 r: { a: 0, k: 0 },
                 a: { a: 0, k: [0, 0, 0] },
@@ -102,6 +115,7 @@ export const useStore = create<EditorState>((set) => ({
     }),
 
     updateLayerProperty: (layerInd, propertyPath, value) => set((state) => {
+        useHistory.getState().pushState(state.animation);
         const newLayers = state.animation.layers.map((layer) => {
             if (layer.ind !== layerInd) return layer;
             const newLayer = JSON.parse(JSON.stringify(layer));
@@ -122,6 +136,7 @@ export const useStore = create<EditorState>((set) => ({
     }),
 
     deleteShape: (layerInd, shapePath) => set((state) => {
+        useHistory.getState().pushState(state.animation);
         const newLayers = state.animation.layers.map((layer) => {
             if (layer.ind !== layerInd) return layer;
             const newLayer = JSON.parse(JSON.stringify(layer));
@@ -142,13 +157,16 @@ export const useStore = create<EditorState>((set) => ({
         };
     }),
 
-    deleteLayer: (ind) => set((state) => ({
-        animation: {
-            ...state.animation,
-            layers: state.animation.layers.filter(l => l.ind !== ind)
-        },
-        selectedLayerId: state.selectedLayerId === ind ? null : state.selectedLayerId
-    })),
+    deleteLayer: (ind) => set((state) => {
+        useHistory.getState().pushState(state.animation);
+        return {
+            animation: {
+                ...state.animation,
+                layers: state.animation.layers.filter(l => l.ind !== ind)
+            },
+            selectedLayerId: state.selectedLayerId === ind ? null : state.selectedLayerId
+        };
+    }),
 
     selectLayer: (id) => set({ selectedLayerId: id, activeTool: 'select', selectedShapePath: null }),
 
@@ -187,6 +205,62 @@ export const useStore = create<EditorState>((set) => ({
 
             const prop = current[path[path.length - 1]];
             if (!prop) return layer;
+
+            // Check if value is a ShapePath (has v, i, o properties that are arrays)
+            const isShapePath = value &&
+                Array.isArray(value.v) &&
+                Array.isArray(value.i) &&
+                Array.isArray(value.o) &&
+                typeof value.c === 'boolean';
+
+            if (isShapePath) {
+                // Handle ShapePath keyframes specially
+                if (prop.a === 0) {
+                    // Convert from static to animated
+                    const staticPath = prop.k;
+                    prop.a = 1;
+                    prop.k = [{
+                        t: 0,
+                        s: [JSON.parse(JSON.stringify(staticPath))],
+                        // Use linear easing for shape morphing
+                        i: { x: 0.833, y: 0.833 },
+                        o: { x: 0.167, y: 0.167 }
+                    }];
+                }
+
+                const keyframes = prop.k as any[];
+                const existingKeyframe = keyframes.find(k => Math.abs(k.t - time) < 0.1);
+
+                if (existingKeyframe) {
+                    existingKeyframe.s = [JSON.parse(JSON.stringify(value))];
+                } else {
+                    keyframes.push({
+                        t: time,
+                        s: [JSON.parse(JSON.stringify(value))],
+                        i: { x: 0.833, y: 0.833 },
+                        o: { x: 0.167, y: 0.167 }
+                    });
+                    keyframes.sort((a, b) => a.t - b.t);
+                }
+
+                // Sync 'e' (end values) for ShapePath keyframes
+                for (let j = 0; j < keyframes.length; j++) {
+                    const cur = keyframes[j];
+                    const next = keyframes[j + 1];
+
+                    if (next) {
+                        cur.e = JSON.parse(JSON.stringify(next.s));
+                    } else {
+                        cur.e = JSON.parse(JSON.stringify(cur.s));
+                    }
+
+                    // Ensure easing handles exist
+                    if (!cur.i) cur.i = { x: 0.833, y: 0.833 };
+                    if (!cur.o) cur.o = { x: 0.167, y: 0.167 };
+                }
+
+                return newLayer;
+            }
 
             // Ensure it's animated
             if (prop.a === 0) {
@@ -278,6 +352,42 @@ export const useStore = create<EditorState>((set) => ({
 
             const prop = current[path[path.length - 1]];
             if (!prop) return layer;
+
+            // Check if this is a ShapePath property (ks property on 'sh' type shapes)
+            const isShapePathProperty = propertyPath.endsWith('.ks') &&
+                prop.k &&
+                (prop.a === 0 ? (prop.k.v !== undefined) : true);
+
+            if (isShapePathProperty) {
+                if (prop.a === 1) {
+                    // Switching to static: take path from first keyframe
+                    const firstKfPath = Array.isArray(prop.k) && prop.k[0]?.s ? prop.k[0].s[0] : prop.k;
+                    prop.a = 0;
+                    prop.k = JSON.parse(JSON.stringify(firstKfPath));
+                } else {
+                    // Switching to animated
+                    const staticPath = prop.k;
+                    const endTime = state.animation.op - 1;
+                    prop.a = 1;
+                    prop.k = [
+                        {
+                            t: 0,
+                            s: [JSON.parse(JSON.stringify(staticPath))],
+                            e: [JSON.parse(JSON.stringify(staticPath))],
+                            i: { x: 0.833, y: 0.833 },
+                            o: { x: 0.167, y: 0.167 }
+                        },
+                        {
+                            t: endTime,
+                            s: [JSON.parse(JSON.stringify(staticPath))],
+                            e: [JSON.parse(JSON.stringify(staticPath))],
+                            i: { x: 0.833, y: 0.833 },
+                            o: { x: 0.167, y: 0.167 }
+                        }
+                    ];
+                }
+                return newLayer;
+            }
 
             if (prop.a === 1) {
                 // Switching to static: take value from first keyframe
@@ -493,6 +603,180 @@ export const useStore = create<EditorState>((set) => ({
             return { animation: { ...state.animation, layers: newLayers } };
         }
 
+        return state;
+    }),
+
+    addIconLayer: async (iconName: string, preset: 'draw-in' | 'scale-in' | 'fade-in') => {
+        const { IconManager } = await import('../lib/IconManager');
+        const svgPath = await IconManager.fetchIconSvgPath(iconName);
+        if (!svgPath) return;
+
+        const shapePaths = IconManager.parseSvgPath(svgPath);
+        const ind = Date.now();
+        const state = useStore.getState();
+
+        const newLayer: Layer = {
+            ind,
+            ty: 4,
+            nm: `Icon: ${iconName}`,
+            ks: {
+                o: { a: 0, k: 100 },
+                p: { a: 0, k: [state.animation.w / 2, state.animation.h / 2, 0] },
+                s: { a: 0, k: [400, 400, 100] },
+                r: { a: 0, k: 0 },
+                a: { a: 0, k: [12, 12, 0] },
+            },
+            ip: 0,
+            op: state.animation.op,
+            st: 0,
+            shapes: [
+                {
+                    ty: 'gr',
+                    nm: iconName,
+                    it: [
+                        ...shapePaths.map((p, i) => ({
+                            ty: 'sh',
+                            nm: `Path ${i}`,
+                            ks: { a: 0 as const, k: p }
+                        })),
+                        {
+                            ty: 'fl',
+                            nm: 'Fill',
+                            c: { a: 0 as const, k: [0, 0, 0] },
+                            o: { a: 0 as const, k: 100 }
+                        },
+                        {
+                            ty: 'tr',
+                            nm: 'Transform',
+                            p: { a: 0 as const, k: [0, 0] },
+                            a: { a: 0 as const, k: [0, 0] },
+                            s: { a: 0 as const, k: [100, 100] },
+                            r: { a: 0 as const, k: 0 },
+                            o: { a: 0 as const, k: 100 }
+                        }
+                    ]
+                }
+            ]
+        };
+
+        IconManager.applyPreset(newLayer, preset);
+
+        state.addLayer(newLayer);
+    },
+
+    deleteVertex: (layerInd, shapePath, vertexIndex) => set((state) => {
+        const newLayers = state.animation.layers.map((layer) => {
+            if (layer.ind !== layerInd) return layer;
+
+            const newLayer = JSON.parse(JSON.stringify(layer));
+            const pathParts = shapePath.split('.');
+
+            // Navigate to the shape's ks property
+            let current: any = newLayer;
+            for (const part of pathParts) {
+                current = current[part];
+            }
+
+            // current should now be the ks property containing v, i, o, c
+            if (current && current.a === 0 && current.k && current.k.v) {
+                // Static path - remove vertex at index
+                if (current.k.v.length > 2) { // Keep at least 2 vertices
+                    current.k.v.splice(vertexIndex, 1);
+                    current.k.i.splice(vertexIndex, 1);
+                    current.k.o.splice(vertexIndex, 1);
+                }
+            } else if (current && current.a === 1 && Array.isArray(current.k)) {
+                // Animated path - remove vertex from all keyframes
+                current.k.forEach((kf: any) => {
+                    if (kf.s && kf.s[0] && kf.s[0].v && kf.s[0].v.length > 2) {
+                        kf.s[0].v.splice(vertexIndex, 1);
+                        kf.s[0].i.splice(vertexIndex, 1);
+                        kf.s[0].o.splice(vertexIndex, 1);
+                    }
+                    if (kf.e && kf.e[0] && kf.e[0].v && kf.e[0].v.length > 2) {
+                        kf.e[0].v.splice(vertexIndex, 1);
+                        kf.e[0].i.splice(vertexIndex, 1);
+                        kf.e[0].o.splice(vertexIndex, 1);
+                    }
+                });
+            }
+
+            return newLayer;
+        });
+
+        return { animation: { ...state.animation, layers: newLayers } };
+    }),
+
+    addVertex: (layerInd, shapePath, afterIndex) => set((state) => {
+        const newLayers = state.animation.layers.map((layer) => {
+            if (layer.ind !== layerInd) return layer;
+
+            const newLayer = JSON.parse(JSON.stringify(layer));
+            const pathParts = shapePath.split('.');
+
+            // Navigate to the shape's ks property
+            let current: any = newLayer;
+            for (const part of pathParts) {
+                current = current[part];
+            }
+
+            const insertVertex = (pathData: any) => {
+                if (!pathData || !pathData.v) return;
+
+                const v = pathData.v;
+                const nextIndex = (afterIndex + 1) % v.length;
+
+                // Calculate midpoint between current and next vertex
+                const midX = (v[afterIndex][0] + v[nextIndex][0]) / 2;
+                const midY = (v[afterIndex][1] + v[nextIndex][1]) / 2;
+
+                // Insert new vertex after the specified index
+                pathData.v.splice(afterIndex + 1, 0, [midX, midY]);
+                pathData.i.splice(afterIndex + 1, 0, [0, 0]); // No in-tangent
+                pathData.o.splice(afterIndex + 1, 0, [0, 0]); // No out-tangent
+            };
+
+            if (current && current.a === 0 && current.k) {
+                // Static path
+                insertVertex(current.k);
+            } else if (current && current.a === 1 && Array.isArray(current.k)) {
+                // Animated path - add vertex to all keyframes
+                current.k.forEach((kf: any) => {
+                    if (kf.s && kf.s[0]) insertVertex(kf.s[0]);
+                    if (kf.e && kf.e[0]) insertVertex(kf.e[0]);
+                });
+            }
+
+            return newLayer;
+        });
+
+        return { animation: { ...state.animation, layers: newLayers } };
+    }),
+
+    setCanvasSize: (width, height) => set((state) => {
+        useHistory.getState().pushState(state.animation);
+        return {
+            animation: {
+                ...state.animation,
+                w: width,
+                h: height
+            }
+        };
+    }),
+
+    undo: () => set((state) => {
+        const previousAnimation = useHistory.getState().undo(state.animation);
+        if (previousAnimation) {
+            return { animation: previousAnimation };
+        }
+        return state;
+    }),
+
+    redo: () => set((state) => {
+        const nextAnimation = useHistory.getState().redo(state.animation);
+        if (nextAnimation) {
+            return { animation: nextAnimation };
+        }
         return state;
     })
 }));

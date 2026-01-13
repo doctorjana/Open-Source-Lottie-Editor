@@ -112,13 +112,12 @@ export interface ShapeElement {
     lj?: number; // Line Join
     ml?: number; // Miter Limit
 
-    // Star/Polygon (sr)
-    sy?: number; // Star Type (1: Star, 2: Polygon)
-    pt?: Value<number>; // Points
-    ir?: Value<number>; // Inner Radius
-    is?: Value<number>; // Inner Roundness
-    or?: Value<number>; // Outer Radius
-    os?: Value<number>; // Outer Roundness
+    // Trim Paths (tm)
+    tm?: number; // Should be ty: 'tm'
+    m?: number; // Trim Multiple Shapes
+    // Note: s, e, o are used for both tm (scalar) and others (vector)
+    // We'll use any or careful union types if needed, but 'any' is safer for Lottie's complexity.
+    [key: string]: any;
 }
 
 export interface ShapePath {

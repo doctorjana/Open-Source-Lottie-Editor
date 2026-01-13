@@ -2,8 +2,8 @@ import { useStore } from '../../store/useStore';
 import { type Layer } from '../../types/lottie';
 import { clsx } from 'clsx';
 import { Play, Pause, Square, Circle, Trash2, Star, Hexagon, PenTool, MousePointer2, Settings, Download, Upload, Type, ChevronDown, FileJson, FileArchive, Video } from 'lucide-react';
-import { loadDotLottie, saveDotLottie, recordCanvasToVideo } from '../../lib/lottieUtils';
-import { useState } from 'react';
+import { loadDotLottie, saveDotLottie, recordCanvasToVideo, svgToLottieLayer } from '../../lib/lottieUtils';
+import { useState, useEffect } from 'react';
 
 export function Header() {
     const addLayer = useStore((state) => state.addLayer);
@@ -13,6 +13,7 @@ export function Header() {
     const togglePlayback = useStore((state) => state.togglePlayback);
     const animation = useStore((state) => state.animation);
     const setAnimation = useStore((state) => state.setAnimation);
+    const setCanvasSize = useStore((state) => state.setCanvasSize);
     const activeTool = useStore((state) => state.activeTool);
     const setTool = useStore((state) => state.setTool);
     const addTextLayer = useStore((state) => state.addTextLayer);
@@ -25,7 +26,7 @@ export function Header() {
             nm: "Rectangle Layer",
             ks: {
                 o: { a: 0, k: 100 },
-                p: { a: 0, k: [960, 540, 0] },
+                p: { a: 0, k: [animation.w / 2, animation.h / 2, 0] },
                 s: { a: 0, k: [100, 100, 100] },
                 r: { a: 0, k: 0 },
                 a: { a: 0, k: [0, 0, 0] },
@@ -73,7 +74,7 @@ export function Header() {
             nm: "Ellipse Layer",
             ks: {
                 o: { a: 0, k: 100 },
-                p: { a: 0, k: [960, 540, 0] },
+                p: { a: 0, k: [animation.w / 2, animation.h / 2, 0] },
                 s: { a: 0, k: [100, 100, 100] },
                 r: { a: 0, k: 0 },
                 a: { a: 0, k: [0, 0, 0] },
@@ -120,7 +121,7 @@ export function Header() {
             nm: "Star Layer",
             ks: {
                 o: { a: 0, k: 100 },
-                p: { a: 0, k: [960, 540, 0] },
+                p: { a: 0, k: [animation.w / 2, animation.h / 2, 0] },
                 s: { a: 0, k: [100, 100, 100] },
                 r: { a: 0, k: 0 },
                 a: { a: 0, k: [0, 0, 0] },
@@ -173,7 +174,7 @@ export function Header() {
             nm: "Polygon Layer",
             ks: {
                 o: { a: 0, k: 100 },
-                p: { a: 0, k: [960, 540, 0] },
+                p: { a: 0, k: [animation.w / 2, animation.h / 2, 0] },
                 s: { a: 0, k: [100, 100, 100] },
                 r: { a: 0, k: 0 },
                 a: { a: 0, k: [0, 0, 0] },
@@ -231,7 +232,19 @@ export function Header() {
     };
 
     const [isExportOpen, setIsExportOpen] = useState(false);
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [exportProgress, setExportProgress] = useState<number | null>(null);
+
+    const [canvasSize, setLocalCanvasSize] = useState({ w: animation.w, h: animation.h });
+
+    useEffect(() => {
+        setLocalCanvasSize({ w: animation.w, h: animation.h });
+    }, [animation.w, animation.h]);
+
+    const handleSettingsSave = () => {
+        setCanvasSize(canvasSize.w, canvasSize.h);
+        setIsSettingsOpen(false);
+    };
 
     const handleExport = async (format: 'json' | 'lottie' | 'mp4') => {
         setIsExportOpen(false);
@@ -293,11 +306,30 @@ export function Header() {
             if (file.name.endsWith('.lottie')) {
                 const data = await loadDotLottie(file);
                 setAnimation(data);
-            } else {
+            } else if (file.name.endsWith('.svg')) {
+                // SVG Import - add as a new layer
                 const reader = new FileReader();
-                reader.onload = (e) => {
+                reader.onload = (evt) => {
                     try {
-                        const json = JSON.parse(e.target?.result as string);
+                        const svgContent = evt.target?.result as string;
+                        const layer = svgToLottieLayer(svgContent, animation.w, animation.h);
+                        if (layer) {
+                            addLayer(layer);
+                        } else {
+                            alert("Could not parse SVG file. Make sure it contains valid shapes.");
+                        }
+                    } catch (err) {
+                        console.error("SVG parse error", err);
+                        alert("Failed to parse SVG: " + (err instanceof Error ? err.message : String(err)));
+                    }
+                };
+                reader.readAsText(file);
+            } else {
+                // JSON Import
+                const reader = new FileReader();
+                reader.onload = (evt) => {
+                    try {
+                        const json = JSON.parse(evt.target?.result as string);
                         if (json.v && json.layers) {
                             setAnimation(json);
                         } else {
@@ -313,6 +345,8 @@ export function Header() {
             console.error("Import failed", err);
             alert("Import failed: " + (err instanceof Error ? err.message : String(err)));
         }
+        // Reset input so same file can be imported again
+        e.target.value = '';
     };
 
     const ToolButton = ({ tool, icon: Icon, title, onClick }: { tool: any, icon: any, title: string, onClick?: () => void }) => (
@@ -349,7 +383,7 @@ export function Header() {
                 {/* Toolbar */}
                 <div className="flex items-center gap-1 bg-muted/30 p-1 rounded-lg border border-border/50">
                     <ToolButton tool="select" icon={MousePointer2} title="Selection Tool (V) - Move, Scale, Rotate" />
-                    <ToolButton tool="pen" icon={PenTool} title="Pen Tool (G)" />
+                    <ToolButton tool="pen" icon={PenTool} title="Path Tool (P) - Click canvas to draw, click selected layer to edit vertices (Alt+Click to delete)" />
                     <ToolButton tool="text" icon={Type} title="Type Tool (T)" onClick={handleAddText} />
                     <div className="w-[1px] h-4 bg-border/50 mx-1" />
                     <ToolButton tool="rectangle" icon={Square} title="Rectangle Tool (R)" onClick={handleAddRect} />
@@ -380,10 +414,10 @@ export function Header() {
                 </div>
 
                 <div className="flex gap-1.5">
-                    <label className="p-1.5 hover:bg-muted rounded flex items-center gap-2 cursor-pointer transition-colors" title="Import JSON or .lottie">
+                    <label className="p-1.5 hover:bg-muted rounded flex items-center gap-2 cursor-pointer transition-colors" title="Import JSON, .lottie, or SVG">
                         <Upload className="w-4 h-4" />
                         <span className="text-[10px] font-bold uppercase tracking-tight">Import</span>
-                        <input type="file" accept=".json,.lottie" className="hidden" onChange={handleImport} />
+                        <input type="file" accept=".json,.lottie,.svg" className="hidden" onChange={handleImport} />
                     </label>
 
                     <div className="relative">
@@ -453,9 +487,53 @@ export function Header() {
                         </div>
                     )}
 
-                    <button className="p-1.5 hover:bg-muted rounded transition-colors">
-                        <Settings className="w-4 h-4" />
-                    </button>
+                    <div className="relative">
+                        <button
+                            onClick={() => {
+                                setIsSettingsOpen(!isSettingsOpen);
+                                setIsExportOpen(false);
+                            }}
+                            className={clsx(
+                                "p-1.5 rounded transition-colors",
+                                isSettingsOpen ? "bg-muted text-foreground" : "hover:bg-muted"
+                            )}
+                            title="Settings"
+                        >
+                            <Settings className="w-4 h-4" />
+                        </button>
+
+                        {isSettingsOpen && (
+                            <div className="absolute right-0 top-full mt-2 w-64 bg-popover border border-border rounded-lg shadow-xl p-4 z-[100]">
+                                <h3 className="text-xs font-bold uppercase tracking-widest mb-4">Canvas Settings</h3>
+                                <div className="space-y-4">
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-bold text-muted-foreground uppercase">Width (px)</label>
+                                        <input
+                                            type="number"
+                                            value={canvasSize.w}
+                                            onChange={(e) => setLocalCanvasSize({ ...canvasSize, w: parseInt(e.target.value) || 0 })}
+                                            className="w-full bg-muted/50 border border-border rounded px-2 py-1 text-xs focus:outline-none focus:border-blue-500"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-bold text-muted-foreground uppercase">Height (px)</label>
+                                        <input
+                                            type="number"
+                                            value={canvasSize.h}
+                                            onChange={(e) => setLocalCanvasSize({ ...canvasSize, h: parseInt(e.target.value) || 0 })}
+                                            className="w-full bg-muted/50 border border-border rounded px-2 py-1 text-xs focus:outline-none focus:border-blue-500"
+                                        />
+                                    </div>
+                                    <button
+                                        onClick={handleSettingsSave}
+                                        className="w-full bg-blue-500 text-white py-1.5 rounded text-xs font-bold hover:bg-blue-600 transition-colors"
+                                    >
+                                        Save Changes
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
         </header>

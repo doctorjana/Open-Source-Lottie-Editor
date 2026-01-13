@@ -36,6 +36,9 @@ export function PropertiesPanel() {
     const syncTextToShapes = useStore((state) => state.syncTextToShapes);
     const convertToPath = useStore((state) => state.convertToPath);
     const selectedShapePath = useStore((state) => state.selectedShapePath);
+    const deleteShape = useStore((state) => state.deleteShape);
+    const deleteVertex = useStore((state) => state.deleteVertex);
+    const addVertex = useStore((state) => state.addVertex);
 
     const [fonts, setFonts] = useState<FontMetadata[]>([]);
     const [fontSearch, setFontSearch] = useState('');
@@ -48,13 +51,13 @@ export function PropertiesPanel() {
     const isLocked = selectedLayer ? !!lockedIds[selectedLayer.ind] : false;
 
     // Unified helper for property values
-    const getVal = <T,>(prop: any): T => getLottieVal<T>(prop, currentTime, 0);
+    const getVal = <T,>(prop: any, defaultValue: any = 0): T => getLottieVal<T>(prop, currentTime, defaultValue);
 
     // --- Transform Updaters ---
 
     const handlePropertyChange = (path: string, value: any, prop: any) => {
         if (!selectedLayer) return;
-        if (prop.a === 1) {
+        if (prop && prop.a === 1) {
             addKeyframe(selectedLayer.ind, path, currentTime, value);
         } else {
             // Static update
@@ -91,28 +94,28 @@ export function PropertiesPanel() {
     };
 
     const handlePosChange = (axis: 0 | 1, value: number) => {
-        if (!selectedLayer) return;
-        const p = selectedLayer.ks.p;
-        const currentVal = [...getVal<Vector3>(p)];
+        if (!selectedLayer || isNaN(value)) return;
+        const p = selectedLayer.ks?.p || { a: 0, k: [0, 0, 0] };
+        const currentVal = [...getVal<Vector3>(p, [0, 0, 0])];
         currentVal[axis] = value;
         handlePropertyChange('ks.p', currentVal, p);
     };
 
     const handleScaleChange = (value: number) => {
         if (!selectedLayer) return;
-        const s = selectedLayer.ks.s;
+        const s = selectedLayer.ks?.s || { a: 0, k: [100, 100, 100] };
         const newK: Vector3 = [value, value, 100];
         handlePropertyChange('ks.s', newK, s);
     };
 
     const handleRotationChange = (value: number) => {
-        if (!selectedLayer) return;
-        handlePropertyChange('ks.r', value, selectedLayer.ks.r);
+        if (!selectedLayer || isNaN(value)) return;
+        handlePropertyChange('ks.r', value, selectedLayer.ks?.r || { a: 0, k: 0 });
     };
 
     const handleOpacityChange = (value: number) => {
-        if (!selectedLayer) return;
-        handlePropertyChange('ks.o', value, selectedLayer.ks.o);
+        if (!selectedLayer || isNaN(value)) return;
+        handlePropertyChange('ks.o', value, selectedLayer.ks?.o || { a: 0, k: 100 });
     };
 
     // --- Color Updaters ---
@@ -236,10 +239,10 @@ export function PropertiesPanel() {
         );
     }
 
-    const pos = getVal<Vector3>(selectedLayer.ks.p);
-    const scale = getVal<Vector3>(selectedLayer.ks.s);
-    const rot = getVal<number>(selectedLayer.ks.r);
-    const op = getVal<number>(selectedLayer.ks.o);
+    const pos = getVal<Vector3>(selectedLayer.ks?.p, [0, 0, 0]);
+    const scale = getVal<Vector3>(selectedLayer.ks?.s, [100, 100, 100]);
+    const rot = getVal<number>(selectedLayer.ks?.r, 0);
+    const op = getVal<number>(selectedLayer.ks?.o, 100);
 
     let currentColor = "#ffffff";
     let colorProp = null;
@@ -397,25 +400,116 @@ export function PropertiesPanel() {
 
                         {/* Path Properties */}
                         {selectedShape.ty === 'sh' && (
-                            <div className="pt-2">
-                                <label className="flex items-center gap-2 cursor-pointer group">
-                                    <div className="relative flex items-center justify-center">
-                                        <input
-                                            type="checkbox"
-                                            className="peer h-4 w-4 appearance-none rounded border border-border bg-input transition-all checked:bg-blue-500 checked:border-blue-500"
-                                            checked={getLottieVal<any>(selectedShape.ks, currentTime, {}).c || false}
-                                            onChange={(e) => {
-                                                const currentKs = getLottieVal<any>(selectedShape.ks, currentTime, {});
-                                                handlePropertyChange(`${selectedShapePath}.ks`, { ...currentKs, c: e.target.checked }, selectedShape.ks);
-                                            }}
-                                        />
-                                        <svg className="absolute h-3 w-3 text-white opacity-0 peer-checked:opacity-100 transition-opacity pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="4">
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                                        </svg>
+                            <div className="space-y-3">
+                                <div className="flex items-center gap-2">
+                                    <Stopwatch path={`${selectedShapePath}.ks`} prop={selectedShape.ks} />
+                                    <div className="flex-1">
+                                        <label className="text-[9px] text-muted-foreground uppercase font-bold">Path Animation</label>
+                                        <p className="text-[8px] text-muted-foreground/70">
+                                            {selectedShape.ks?.a === 1
+                                                ? `Animated (${(selectedShape.ks.k as any[]).length} keyframes)`
+                                                : 'Static'}
+                                        </p>
                                     </div>
-                                    <span className="text-[10px] uppercase font-bold text-muted-foreground group-hover:text-foreground transition-colors">Closed Loop</span>
-                                </label>
-                                <p className="text-[9px] text-muted-foreground mt-2 italic">Edit vertices directly on the canvas using the selection tool.</p>
+                                </div>
+
+                                {/* Vertex Info */}
+                                <div className="bg-white/[0.02] rounded p-2 border border-white/5">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-[9px] text-muted-foreground uppercase">Vertices</span>
+                                        <span className="text-[10px] text-foreground font-mono">
+                                            {getLottieVal<any>(selectedShape.ks, currentTime, {}).v?.length || 0} points
+                                        </span>
+                                    </div>
+                                    <p className="text-[8px] text-muted-foreground mt-1">
+                                        Click and drag vertices on the canvas to edit the path shape.
+                                    </p>
+                                </div>
+
+                                <button
+                                    onClick={() => {
+                                        if (!selectedLayer) return;
+                                        const currentPath = getLottieVal<any>(selectedShape.ks, currentTime, {});
+                                        if (currentPath && currentPath.v) {
+                                            addKeyframe(selectedLayer.ind, `${selectedShapePath}.ks`, currentTime, currentPath);
+                                        }
+                                    }}
+                                    className="w-full py-2 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/30 rounded text-[10px] uppercase font-bold tracking-widest transition-all"
+                                >
+                                    Add Path Keyframe at Frame {Math.round(currentTime)}
+                                </button>
+
+                                <div className="pt-2">
+                                    <label className="flex items-center gap-2 cursor-pointer group">
+                                        <div className="relative flex items-center justify-center">
+                                            <input
+                                                type="checkbox"
+                                                className="peer h-4 w-4 appearance-none rounded border border-border bg-input transition-all checked:bg-blue-500 checked:border-blue-500"
+                                                checked={getLottieVal<any>(selectedShape.ks, currentTime, {}).c || false}
+                                                onChange={(e) => {
+                                                    const currentKs = getLottieVal<any>(selectedShape.ks, currentTime, {});
+                                                    handlePropertyChange(`${selectedShapePath}.ks`, { ...currentKs, c: e.target.checked }, selectedShape.ks);
+                                                }}
+                                            />
+                                            <svg className="absolute h-3 w-3 text-white opacity-0 peer-checked:opacity-100 transition-opacity pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="4">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                            </svg>
+                                        </div>
+                                        <span className="text-[10px] uppercase font-bold text-muted-foreground group-hover:text-foreground transition-colors">Closed Loop</span>
+                                    </label>
+                                </div>
+
+                                {/* Vertex Management */}
+                                <div className="space-y-2 pt-2 border-t border-white/10">
+                                    <span className="text-[9px] text-muted-foreground uppercase font-bold">Vertex Management</span>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <button
+                                            onClick={() => {
+                                                if (!selectedLayer) return;
+                                                const vertices = getLottieVal<any>(selectedShape.ks, currentTime, {}).v;
+                                                const lastIdx = vertices ? vertices.length - 1 : 0;
+                                                addVertex(selectedLayer.ind, `${selectedShapePath}.ks`, lastIdx);
+                                            }}
+                                            className="py-1.5 bg-green-500/10 hover:bg-green-500/20 text-green-400 border border-green-500/30 rounded text-[9px] uppercase font-bold transition-all"
+                                        >
+                                            + Add Point
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                if (!selectedLayer) return;
+                                                const vertices = getLottieVal<any>(selectedShape.ks, currentTime, {}).v;
+                                                if (vertices && vertices.length > 2) {
+                                                    deleteVertex(selectedLayer.ind, `${selectedShapePath}.ks`, vertices.length - 1);
+                                                }
+                                            }}
+                                            className="py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded text-[9px] uppercase font-bold transition-all"
+                                        >
+                                            − Delete Last
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Delete Path */}
+                                <button
+                                    onClick={() => {
+                                        if (!selectedLayer || !selectedShapePath) return;
+                                        // Remove .ks from the path to get the shape path
+                                        const pathWithoutKs = selectedShapePath.replace(/\.ks$/, '');
+                                        deleteShape(selectedLayer.ind, pathWithoutKs);
+                                    }}
+                                    className="w-full py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded text-[10px] uppercase font-bold tracking-widest transition-all"
+                                >
+                                    🗑️ Delete This Path
+                                </button>
+
+                                <div className="bg-blue-500/5 border border-blue-500/20 rounded p-2 mt-2">
+                                    <p className="text-[9px] text-blue-400 font-medium">✏️ How to Edit:</p>
+                                    <ul className="text-[8px] text-blue-300/80 mt-1 space-y-0.5 list-disc list-inside">
+                                        <li>Drag square handles to move vertices</li>
+                                        <li>Drag circle handles to adjust curves</li>
+                                        <li>Use "Add Path Keyframe" to animate</li>
+                                    </ul>
+                                </div>
                             </div>
                         )}
 
@@ -650,25 +744,25 @@ export function PropertiesPanel() {
                             <div className="flex-1 grid grid-cols-2 gap-2">
                                 <div className="space-y-1">
                                     <label className="text-[9px] text-muted-foreground uppercase">Position X</label>
-                                    <input type="number" className="w-full bg-input border border-border rounded px-2 py-1" value={Math.round(pos[0])} onChange={(e) => handlePosChange(0, Number(e.target.value))} />
+                                    <input type="number" className="w-full bg-input border border-border rounded px-2 py-1" value={isNaN(pos[0]) ? 0 : Math.round(pos[0])} onChange={(e) => handlePosChange(0, Number(e.target.value))} />
                                 </div>
                                 <div className="space-y-1">
                                     <label className="text-[9px] text-muted-foreground uppercase">Position Y</label>
-                                    <input type="number" className="w-full bg-input border border-border rounded px-2 py-1" value={Math.round(pos[1])} onChange={(e) => handlePosChange(1, Number(e.target.value))} />
+                                    <input type="number" className="w-full bg-input border border-border rounded px-2 py-1" value={isNaN(pos[1]) ? 0 : Math.round(pos[1])} onChange={(e) => handlePosChange(1, Number(e.target.value))} />
                                 </div>
                             </div>
                         </div>
 
                         <div className="flex items-center gap-2">
-                            <Stopwatch path="ks.s" prop={selectedLayer.ks.s} />
+                            <Stopwatch path="ks.s" prop={selectedLayer.ks?.s} />
                             <div className="flex-1 space-y-1">
                                 <label className="text-[9px] text-muted-foreground uppercase">Scale %</label>
-                                <input type="number" className="w-full bg-input border border-border rounded px-2 py-1" value={Math.round(scale[0])} onChange={(e) => handleScaleChange(Number(e.target.value))} />
+                                <input type="number" className="w-full bg-input border border-border rounded px-2 py-1" value={isNaN(scale[0]) ? 100 : Math.round(scale[0])} onChange={(e) => handleScaleChange(Number(e.target.value))} />
                             </div>
                         </div>
 
                         <div className="flex items-center gap-2">
-                            <Stopwatch path="ks.r" prop={selectedLayer.ks.r} />
+                            <Stopwatch path="ks.r" prop={selectedLayer.ks?.r} />
                             <div className="flex-1 space-y-1">
                                 <label className="text-[9px] text-muted-foreground uppercase">Rotation</label>
                                 <input type="number" className="w-full bg-input border border-border rounded px-2 py-1" value={Math.round(rot)} onChange={(e) => handleRotationChange(Number(e.target.value))} />
@@ -676,12 +770,12 @@ export function PropertiesPanel() {
                         </div>
 
                         <div className="flex items-center gap-2">
-                            <Stopwatch path="ks.o" prop={selectedLayer.ks.o} />
+                            <Stopwatch path="ks.o" prop={selectedLayer.ks?.o} />
                             <div className="flex-1 space-y-1">
                                 <label className="text-[9px] text-muted-foreground uppercase">Opacity %</label>
                                 <div className="flex items-center gap-3">
-                                    <input type="range" className="flex-1 accent-blue-500" value={op} onChange={(e) => handleOpacityChange(Number(e.target.value))} />
-                                    <span className="w-8 text-right font-mono text-[10px]">{Math.round(op)}%</span>
+                                    <input type="range" className="flex-1 accent-blue-500" value={isNaN(op) ? 100 : op} onChange={(e) => handleOpacityChange(Number(e.target.value))} />
+                                    <span className="w-8 text-right font-mono text-[10px]">{Math.round(isNaN(op) ? 100 : op)}%</span>
                                 </div>
                             </div>
                         </div>
