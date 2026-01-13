@@ -265,7 +265,7 @@ export const svgToLottieLayer = (svgContent: string, canvasW: number, canvasH: n
     // Calculate scale to fit canvas
     const scale = Math.min(canvasW / svgW, canvasH / svgH) * 0.8;
 
-    const shapeItems: any[] = [];
+    const shapeItems: any[] = []; // eslint-disable-line @typescript-eslint/no-explicit-any
 
     // SVG center for offsetting coordinates (to match layer anchor point)
     const svgCenterX = minX + svgW / 2;
@@ -947,7 +947,7 @@ export const recordCanvasToVideo = async (
 
         // This is a placeholder for real frame-by-frame capture logic
         const totalMs = (durationFrames / fps) * 1000;
-        let start = Date.now();
+        const start = Date.now();
         const interval = setInterval(() => {
             const elapsed = Date.now() - start;
             const progress = Math.min(elapsed / totalMs, 1);
