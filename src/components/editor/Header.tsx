@@ -2,7 +2,7 @@ import { useStore } from '../../store/useStore';
 import { type Layer, type Vector2, type Vector3 } from '../../types/lottie';
 import { clsx } from 'clsx';
 import { Play, Pause, Square, Circle, Trash2, Star, Hexagon, PenTool, MousePointer2, Settings, Download, Upload, Type, ChevronDown, FileJson, FileArchive, Video, KeyRound, Undo, Redo } from 'lucide-react';
-import { loadDotLottie, saveDotLottie, recordCanvasToVideo, svgToLottieAsset } from '../../lib/lottieUtils';
+import { loadDotLottie, saveDotLottie, recordCanvasToVideo, svgToLottieAsset, svgToLottieLayer } from '../../lib/lottieUtils';
 import { useState, useEffect } from 'react';
 
 export function Header() {
@@ -329,14 +329,15 @@ export function Header() {
                 const data = await loadDotLottie(file);
                 setAnimation(data);
             } else if (file.name.endsWith('.svg')) {
-                // SVG Import - add as an asset
+                // SVG Import - parse directly as a shape layer to allow path manipulation
                 const reader = new FileReader();
                 reader.onload = (evt) => {
                     try {
                         const svgContent = evt.target?.result as string;
-                        const asset = svgToLottieAsset(svgContent, animation.w, animation.h, file.name);
-                        if (asset) {
-                            useStore.getState().addAsset(asset);
+                        const layer = svgToLottieLayer(svgContent, animation.w, animation.h);
+                        if (layer) {
+                            layer.nm = String(file.name).replace('.svg', '');
+                            useStore.getState().addLayer(layer);
                         } else {
                             alert("Could not parse SVG file. Make sure it contains valid shapes.");
                         }
