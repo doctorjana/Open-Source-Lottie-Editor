@@ -234,6 +234,10 @@ export const svgToLottieLayer = (svgContent: string, canvasW: number, canvasH: n
 
     const shapeItems: any[] = [];
 
+    // SVG center for offsetting coordinates (to match layer anchor point)
+    const svgCenterX = svgW / 2;
+    const svgCenterY = svgH / 2;
+
     // Process all shape elements
     const processElement = (el: Element, inherited: { fill?: string; stroke?: string; strokeWidth?: number } = {}) => {
         const fill = el.getAttribute('fill') || inherited.fill || 'black';
@@ -247,11 +251,18 @@ export const svgToLottieLayer = (svgContent: string, canvasW: number, canvasH: n
             if (d) {
                 const shapePaths = parseSvgPathD(d);
                 shapePaths.forEach((shapePath, idx) => {
+                    // Offset vertices by SVG center so they're relative to anchor point
+                    const offsetPath: ShapePath = {
+                        v: shapePath.v.map(v => [v[0] - svgCenterX, v[1] - svgCenterY] as [number, number]),
+                        i: shapePath.i,
+                        o: shapePath.o,
+                        c: shapePath.c
+                    };
                     const groupItems: any[] = [
                         {
                             ty: 'sh',
                             nm: `Path ${idx + 1}`,
-                            ks: { a: 0, k: shapePath }
+                            ks: { a: 0, k: offsetPath }
                         }
                     ];
 
@@ -298,15 +309,25 @@ export const svgToLottieLayer = (svgContent: string, canvasW: number, canvasH: n
             const y = parseFloat(el.getAttribute('y') || '0');
             const w = parseFloat(el.getAttribute('width') || '0');
             const h = parseFloat(el.getAttribute('height') || '0');
-            const rx = parseFloat(el.getAttribute('rx') || '0');
+
+            // Convert rect to a closed path with 4 vertices (for vertex editing)
+            const rectPath: ShapePath = {
+                v: [
+                    [x - svgCenterX, y - svgCenterY],                     // top-left
+                    [x + w - svgCenterX, y - svgCenterY],                 // top-right
+                    [x + w - svgCenterX, y + h - svgCenterY],             // bottom-right
+                    [x - svgCenterX, y + h - svgCenterY]                  // bottom-left
+                ],
+                i: [[0, 0], [0, 0], [0, 0], [0, 0]],
+                o: [[0, 0], [0, 0], [0, 0], [0, 0]],
+                c: true
+            };
 
             const groupItems: any[] = [
                 {
-                    ty: 'rc',
-                    nm: 'Rectangle',
-                    p: { a: 0, k: [x + w / 2, y + h / 2] },
-                    s: { a: 0, k: [w, h] },
-                    r: { a: 0, k: rx }
+                    ty: 'sh',
+                    nm: 'Rectangle Path',
+                    ks: { a: 0, k: rectPath }
                 }
             ];
 
@@ -340,12 +361,40 @@ export const svgToLottieLayer = (svgContent: string, canvasW: number, canvasH: n
             const cy = parseFloat(el.getAttribute('cy') || '0');
             const r = parseFloat(el.getAttribute('r') || '0');
 
+            // Convert circle to bezier path with 4 points
+            // Kappa constant for bezier circle approximation
+            const kappa = 0.5522847498;
+            const k = r * kappa;
+            const ocx = cx - svgCenterX;  // offset center x
+            const ocy = cy - svgCenterY;  // offset center y
+
+            const circlePath: ShapePath = {
+                v: [
+                    [ocx, ocy - r],      // top
+                    [ocx + r, ocy],      // right
+                    [ocx, ocy + r],      // bottom
+                    [ocx - r, ocy]       // left
+                ],
+                i: [
+                    [-k, 0],   // top: in-tangent from left
+                    [0, -k],   // right: in-tangent from top
+                    [k, 0],    // bottom: in-tangent from right
+                    [0, k]     // left: in-tangent from bottom
+                ],
+                o: [
+                    [k, 0],    // top: out-tangent to right
+                    [0, k],    // right: out-tangent to bottom
+                    [-k, 0],   // bottom: out-tangent to left
+                    [0, -k]    // left: out-tangent to top
+                ],
+                c: true
+            };
+
             const groupItems: any[] = [
                 {
-                    ty: 'el',
-                    nm: 'Ellipse',
-                    p: { a: 0, k: [cx, cy] },
-                    s: { a: 0, k: [r * 2, r * 2] }
+                    ty: 'sh',
+                    nm: 'Circle Path',
+                    ks: { a: 0, k: circlePath }
                 }
             ];
 
@@ -380,12 +429,40 @@ export const svgToLottieLayer = (svgContent: string, canvasW: number, canvasH: n
             const rx = parseFloat(el.getAttribute('rx') || '0');
             const ry = parseFloat(el.getAttribute('ry') || '0');
 
+            // Convert ellipse to bezier path with 4 points
+            const kappa = 0.5522847498;
+            const kx = rx * kappa;
+            const ky = ry * kappa;
+            const ocx = cx - svgCenterX;  // offset center x
+            const ocy = cy - svgCenterY;  // offset center y
+
+            const ellipsePath: ShapePath = {
+                v: [
+                    [ocx, ocy - ry],     // top
+                    [ocx + rx, ocy],     // right
+                    [ocx, ocy + ry],     // bottom
+                    [ocx - rx, ocy]      // left
+                ],
+                i: [
+                    [-kx, 0],   // top: in-tangent from left
+                    [0, -ky],   // right: in-tangent from top
+                    [kx, 0],    // bottom: in-tangent from right
+                    [0, ky]     // left: in-tangent from bottom
+                ],
+                o: [
+                    [kx, 0],    // top: out-tangent to right
+                    [0, ky],    // right: out-tangent to bottom
+                    [-kx, 0],   // bottom: out-tangent to left
+                    [0, -ky]    // left: out-tangent to top
+                ],
+                c: true
+            };
+
             const groupItems: any[] = [
                 {
-                    ty: 'el',
-                    nm: 'Ellipse',
-                    p: { a: 0, k: [cx, cy] },
-                    s: { a: 0, k: [rx * 2, ry * 2] }
+                    ty: 'sh',
+                    nm: 'Ellipse Path',
+                    ks: { a: 0, k: ellipsePath }
                 }
             ];
 
@@ -423,8 +500,9 @@ export const svgToLottieLayer = (svgContent: string, canvasW: number, canvasH: n
                     vertices.push([coords[j], coords[j + 1]]);
                 }
 
+                // Offset vertices by SVG center
                 const shapePath: ShapePath = {
-                    v: vertices,
+                    v: vertices.map(v => [v[0] - svgCenterX, v[1] - svgCenterY] as [number, number]),
                     i: vertices.map(() => [0, 0] as [number, number]),
                     o: vertices.map(() => [0, 0] as [number, number]),
                     c: tagName === 'polygon'
@@ -481,8 +559,9 @@ export const svgToLottieLayer = (svgContent: string, canvasW: number, canvasH: n
             const x2 = parseFloat(el.getAttribute('x2') || '0');
             const y2 = parseFloat(el.getAttribute('y2') || '0');
 
+            // Offset line endpoints by SVG center
             const shapePath: ShapePath = {
-                v: [[x1, y1], [x2, y2]],
+                v: [[x1 - svgCenterX, y1 - svgCenterY], [x2 - svgCenterX, y2 - svgCenterY]],
                 i: [[0, 0], [0, 0]],
                 o: [[0, 0], [0, 0]],
                 c: false
@@ -550,7 +629,7 @@ export const svgToLottieLayer = (svgContent: string, canvasW: number, canvasH: n
             p: { a: 0, k: [canvasW / 2, canvasH / 2, 0] },
             s: { a: 0, k: [scale * 100, scale * 100, 100] },
             r: { a: 0, k: 0 },
-            a: { a: 0, k: [svgW / 2, svgH / 2, 0] }
+            a: { a: 0, k: [0, 0, 0] }
         },
         ip: 0,
         op: 300,
