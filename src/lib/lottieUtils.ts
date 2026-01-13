@@ -195,13 +195,16 @@ const parseColor = (color: string | null): [number, number, number] | null => {
 
     // Hex color
     if (color.startsWith('#')) {
-        const hex = color.slice(1);
+        let hex = color.slice(1);
+        // Handle unusually long hex codes (truncate)
+        if (hex.length > 8) hex = hex.slice(0, 8); // Allow up to 8 chars (RGBA)
+
         if (hex.length === 3) {
             const r = parseInt(hex[0] + hex[0], 16) / 255;
             const g = parseInt(hex[1] + hex[1], 16) / 255;
             const b = parseInt(hex[2] + hex[2], 16) / 255;
             return [r, g, b];
-        } else if (hex.length === 6) {
+        } else if (hex.length >= 6) {
             const r = parseInt(hex.slice(0, 2), 16) / 255;
             const g = parseInt(hex.slice(2, 4), 16) / 255;
             const b = parseInt(hex.slice(4, 6), 16) / 255;
@@ -225,7 +228,8 @@ const parseColor = (color: string | null): [number, number, number] | null => {
         green: [0, 0.5, 0], blue: [0, 0, 1], yellow: [1, 1, 0],
         cyan: [0, 1, 1], magenta: [1, 0, 1], gray: [0.5, 0.5, 0.5],
         grey: [0.5, 0.5, 0.5], orange: [1, 0.65, 0], purple: [0.5, 0, 0.5],
-        pink: [1, 0.75, 0.8], lime: [0, 1, 0], navy: [0, 0, 0.5]
+        pink: [1, 0.75, 0.8], lime: [0, 1, 0], navy: [0, 0, 0.5],
+        transparent: [0, 0, 0] // fallback
     };
 
     return namedColors[color.toLowerCase()] || [0, 0, 0];
@@ -245,10 +249,14 @@ export const svgToLottieLayer = (svgContent: string, canvasW: number, canvasH: n
     const viewBox = svg.getAttribute('viewBox');
     let svgW = parseFloat(svg.getAttribute('width') || '100');
     let svgH = parseFloat(svg.getAttribute('height') || '100');
+    let minX = 0;
+    let minY = 0;
 
     if (viewBox) {
         const parts = viewBox.split(/[\s,]+/).map(parseFloat);
         if (parts.length === 4) {
+            minX = parts[0];
+            minY = parts[1];
             svgW = parts[2];
             svgH = parts[3];
         }
@@ -260,8 +268,8 @@ export const svgToLottieLayer = (svgContent: string, canvasW: number, canvasH: n
     const shapeItems: any[] = [];
 
     // SVG center for offsetting coordinates (to match layer anchor point)
-    const svgCenterX = svgW / 2;
-    const svgCenterY = svgH / 2;
+    const svgCenterX = minX + svgW / 2;
+    const svgCenterY = minY + svgH / 2;
 
     // Process all shape elements
     const processElement = (el: Element, inherited: { fill?: string; stroke?: string; strokeWidth?: number } = {}) => {
