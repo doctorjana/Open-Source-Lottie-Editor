@@ -60,17 +60,21 @@ export function PropertiesPanel() {
         if (prop && prop.a === 1) {
             addKeyframe(selectedLayer.ind, path, currentTime, value);
         } else {
-            // Static update
             const pathParts = path.split('.');
-            const lastPart = pathParts.pop()!;
-            let target: any = selectedLayer;
-            pathParts.forEach(p => target = target[p]);
-
-            updateLayer(selectedLayer.ind, {
-                [pathParts[0]]: (target === selectedLayer)
-                    ? { ...(selectedLayer[lastPart as keyof typeof selectedLayer] as any), k: value }
-                    : deepUpdate(selectedLayer[pathParts[0] as keyof typeof selectedLayer], pathParts.slice(1), value, prop)
-            });
+            if (pathParts.length === 1) {
+                // Top-level property update
+                updateLayer(selectedLayer.ind, { [pathParts[0]]: value });
+            } else {
+                // Deep property update (e.g., 'ks.p' or 'shapes.0.it.1.c')
+                const rootKey = pathParts[0];
+                const updatedRoot = deepUpdate(
+                    selectedLayer[rootKey as keyof typeof selectedLayer],
+                    pathParts.slice(1),
+                    value,
+                    prop
+                );
+                updateLayer(selectedLayer.ind, { [rootKey]: updatedRoot });
+            }
         }
     };
 

@@ -666,6 +666,55 @@ export const svgToLottieLayer = (svgContent: string, canvasW: number, canvasH: n
 };
 
 /**
+ * Converts an SVG string to a Lottie Asset (Precomposition).
+ */
+/**
+ * Converts an SVG string to a Lottie Asset (Precomposition).
+ */
+export const svgToLottieAsset = (svgContent: string, canvasW: number, canvasH: number, fileName: string): any | null => {
+    // Parse SVG to get intrinsic dimensions
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(svgContent, 'image/svg+xml');
+    const svg = doc.querySelector('svg');
+
+    let assetW = canvasW;
+    let assetH = canvasH;
+
+    if (svg) {
+        const viewBox = svg.getAttribute('viewBox');
+        let svgW = parseFloat(svg.getAttribute('width') || '0');
+        let svgH = parseFloat(svg.getAttribute('height') || '0');
+
+        if (viewBox) {
+            const parts = viewBox.split(/[\s,]+/).map(parseFloat);
+            if (parts.length === 4) {
+                if (!svgW) svgW = parts[2];
+                if (!svgH) svgH = parts[3];
+            }
+        }
+
+        if (svgW && svgH) {
+            assetW = svgW;
+            assetH = svgH;
+        }
+    }
+
+    // Use intrinsic dimensions for the asset layer
+    const layer = svgToLottieLayer(svgContent, assetW, assetH);
+    if (!layer) return null;
+
+    layer.nm = fileName;
+
+    return {
+        id: `svg_${fileName}_${Date.now()}`,
+        w: assetW,
+        h: assetH,
+        fr: 30,
+        layers: [layer]
+    };
+};
+
+/**
  * Robustly retrieves the current value of a Lottie property at the given time.
  * Handles static values, animated keyframes, and ensures type-safe returns.
  */

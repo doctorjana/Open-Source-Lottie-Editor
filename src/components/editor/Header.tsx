@@ -1,8 +1,8 @@
 import { useStore } from '../../store/useStore';
-import { type Layer } from '../../types/lottie';
+import { type Layer, type Vector2, type Vector3 } from '../../types/lottie';
 import { clsx } from 'clsx';
 import { Play, Pause, Square, Circle, Trash2, Star, Hexagon, PenTool, MousePointer2, Settings, Download, Upload, Type, ChevronDown, FileJson, FileArchive, Video, KeyRound, Undo, Redo } from 'lucide-react';
-import { loadDotLottie, saveDotLottie, recordCanvasToVideo, svgToLottieLayer } from '../../lib/lottieUtils';
+import { loadDotLottie, saveDotLottie, recordCanvasToVideo, svgToLottieAsset } from '../../lib/lottieUtils';
 import { useState, useEffect } from 'react';
 
 export function Header() {
@@ -30,10 +30,10 @@ export function Header() {
             nm: "Rectangle Layer",
             ks: {
                 o: { a: 0, k: 100 },
-                p: { a: 0, k: [animation.w / 2, animation.h / 2, 0] },
-                s: { a: 0, k: [100, 100, 100] },
+                p: { a: 0, k: [animation.w / 2, animation.h / 2, 0] as Vector3 },
+                s: { a: 0, k: [100, 100, 100] as Vector3 },
                 r: { a: 0, k: 0 },
-                a: { a: 0, k: [0, 0, 0] },
+                a: { a: 0, k: [0, 0, 0] as Vector3 },
             },
             ip: 0,
             op: 300,
@@ -45,22 +45,22 @@ export function Header() {
                     {
                         ty: "rc",
                         nm: "Rectangle Path",
-                        p: { a: 0, k: [0, 0] },
-                        s: { a: 0, k: [200, 200] },
+                        p: { a: 0, k: [0, 0] as Vector2 },
+                        s: { a: 0, k: [200, 200] as Vector2 },
                         r: { a: 0, k: 0 }
                     },
                     {
                         ty: "fl",
                         nm: "Fill",
-                        c: { a: 0, k: [1, 0, 0] },
+                        c: { a: 0, k: [1, 0, 0] as Vector3 },
                         o: { a: 0, k: 100 }
                     },
                     {
                         ty: "tr",
                         nm: "Transform",
-                        p: { a: 0, k: [0, 0] },
-                        a: { a: 0, k: [0, 0] },
-                        s: { a: 0, k: [100, 100] },
+                        p: { a: 0, k: [0, 0] as Vector2 },
+                        a: { a: 0, k: [0, 0] as Vector2 },
+                        s: { a: 0, k: [100, 100] as Vector2 },
                         r: { a: 0, k: 0 },
                         o: { a: 0, k: 100 }
                     }
@@ -78,10 +78,10 @@ export function Header() {
             nm: "Ellipse Layer",
             ks: {
                 o: { a: 0, k: 100 },
-                p: { a: 0, k: [animation.w / 2, animation.h / 2, 0] },
-                s: { a: 0, k: [100, 100, 100] },
+                p: { a: 0, k: [animation.w / 2, animation.h / 2, 0] as Vector3 },
+                s: { a: 0, k: [100, 100, 100] as Vector3 },
                 r: { a: 0, k: 0 },
-                a: { a: 0, k: [0, 0, 0] },
+                a: { a: 0, k: [0, 0, 0] as Vector3 },
             },
             ip: 0,
             op: 300,
@@ -93,21 +93,21 @@ export function Header() {
                     {
                         ty: "el",
                         nm: "Ellipse Path",
-                        p: { a: 0, k: [0, 0] },
-                        s: { a: 0, k: [200, 200] }
+                        p: { a: 0, k: [0, 0] as Vector2 },
+                        s: { a: 0, k: [200, 200] as Vector2 }
                     },
                     {
                         ty: "fl",
                         nm: "Fill",
-                        c: { a: 0, k: [0, 0.5, 1] },
+                        c: { a: 0, k: [0, 0.5, 1] as Vector3 },
                         o: { a: 0, k: 100 }
                     },
                     {
                         ty: "tr",
                         nm: "Transform",
-                        p: { a: 0, k: [0, 0] },
-                        a: { a: 0, k: [0, 0] },
-                        s: { a: 0, k: [100, 100] },
+                        p: { a: 0, k: [0, 0] as Vector2 },
+                        a: { a: 0, k: [0, 0] as Vector2 },
+                        s: { a: 0, k: [100, 100] as Vector2 },
                         r: { a: 0, k: 0 },
                         o: { a: 0, k: 100 }
                     }
@@ -125,10 +125,10 @@ export function Header() {
             nm: "Star Layer",
             ks: {
                 o: { a: 0, k: 100 },
-                p: { a: 0, k: [animation.w / 2, animation.h / 2, 0] },
-                s: { a: 0, k: [100, 100, 100] },
+                p: { a: 0, k: [animation.w / 2, animation.h / 2, 0] as Vector3 },
+                s: { a: 0, k: [100, 100, 100] as Vector3 },
                 r: { a: 0, k: 0 },
-                a: { a: 0, k: [0, 0, 0] },
+                a: { a: 0, k: [0, 0, 0] as Vector3 },
             },
             ip: 0,
             op: 300,
@@ -141,7 +141,7 @@ export function Header() {
                         ty: "sr",
                         nm: "Star Path",
                         sy: 1, // Star
-                        p: { a: 0, k: [0, 0] },
+                        p: { a: 0, k: [0, 0] as Vector2 },
                         r: { a: 0, k: 0 },
                         pt: { a: 0, k: 5 }, // Points
                         ir: { a: 0, k: 50 }, // Inner Radius
@@ -152,15 +152,15 @@ export function Header() {
                     {
                         ty: "fl",
                         nm: "Fill",
-                        c: { a: 0, k: [1, 1, 0] },
+                        c: { a: 0, k: [1, 1, 0] as Vector3 },
                         o: { a: 0, k: 100 }
                     },
                     {
                         ty: "tr",
                         nm: "Transform",
-                        p: { a: 0, k: [0, 0] },
-                        a: { a: 0, k: [0, 0] },
-                        s: { a: 0, k: [100, 100] },
+                        p: { a: 0, k: [0, 0] as Vector2 },
+                        a: { a: 0, k: [0, 0] as Vector2 },
+                        s: { a: 0, k: [100, 100] as Vector2 },
                         r: { a: 0, k: 0 },
                         o: { a: 0, k: 100 }
                     }
@@ -178,10 +178,10 @@ export function Header() {
             nm: "Polygon Layer",
             ks: {
                 o: { a: 0, k: 100 },
-                p: { a: 0, k: [animation.w / 2, animation.h / 2, 0] },
-                s: { a: 0, k: [100, 100, 100] },
+                p: { a: 0, k: [animation.w / 2, animation.h / 2, 0] as Vector3 },
+                s: { a: 0, k: [100, 100, 100] as Vector3 },
                 r: { a: 0, k: 0 },
-                a: { a: 0, k: [0, 0, 0] },
+                a: { a: 0, k: [0, 0, 0] as Vector3 },
             },
             ip: 0,
             op: 300,
@@ -194,7 +194,7 @@ export function Header() {
                         ty: "sr",
                         nm: "Polygon Path",
                         sy: 2, // Polygon
-                        p: { a: 0, k: [0, 0] },
+                        p: { a: 0, k: [0, 0] as Vector2 },
                         r: { a: 0, k: 0 },
                         pt: { a: 0, k: 6 }, // Points
                         or: { a: 0, k: 100 }, // Outer Radius
@@ -203,15 +203,15 @@ export function Header() {
                     {
                         ty: "fl",
                         nm: "Fill",
-                        c: { a: 0, k: [0, 1, 0.5] },
+                        c: { a: 0, k: [0, 1, 0.5] as Vector3 },
                         o: { a: 0, k: 100 }
                     },
                     {
                         ty: "tr",
                         nm: "Transform",
-                        p: { a: 0, k: [0, 0] },
-                        a: { a: 0, k: [0, 0] },
-                        s: { a: 0, k: [100, 100] },
+                        p: { a: 0, k: [0, 0] as Vector2 },
+                        a: { a: 0, k: [0, 0] as Vector2 },
+                        s: { a: 0, k: [100, 100] as Vector2 },
                         r: { a: 0, k: 0 },
                         o: { a: 0, k: 100 }
                     }
@@ -329,14 +329,14 @@ export function Header() {
                 const data = await loadDotLottie(file);
                 setAnimation(data);
             } else if (file.name.endsWith('.svg')) {
-                // SVG Import - add as a new layer
+                // SVG Import - add as an asset
                 const reader = new FileReader();
                 reader.onload = (evt) => {
                     try {
                         const svgContent = evt.target?.result as string;
-                        const layer = svgToLottieLayer(svgContent, animation.w, animation.h);
-                        if (layer) {
-                            addLayer(layer);
+                        const asset = svgToLottieAsset(svgContent, animation.w, animation.h, file.name);
+                        if (asset) {
+                            useStore.getState().addAsset(asset);
                         } else {
                             alert("Could not parse SVG file. Make sure it contains valid shapes.");
                         }

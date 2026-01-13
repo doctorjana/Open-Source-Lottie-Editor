@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { type LottieAnimation, type Layer, createDefaultAnimation } from '../types/lottie';
+import { type LottieAnimation, type Layer, createDefaultAnimation, type Vector2, type Vector3 } from '../types/lottie';
 import { FontManager } from '../lib/FontManager';
 import { toVector3, toVector2 } from '../lib/lottieUtils';
 import { useHistory } from './useHistory';
@@ -40,6 +40,8 @@ interface EditorState {
     addVertex: (layerInd: number, shapePath: string, afterIndex: number) => void;
     selectShape: (path: string | null) => void;
     setCanvasSize: (width: number, height: number) => void;
+    addAsset: (asset: any) => void;
+    addLayerFromAsset: (assetId: string, position?: [number, number]) => void;
 
     // Undo/Redo
     undo: () => void;
@@ -84,7 +86,8 @@ export const useStore = create<EditorState>((set) => ({
                 layers: [layer, ...state.animation.layers]
             },
             selectedLayerId: layer.ind,
-            activeTool: 'select'
+            activeTool: 'select',
+            selectedShapePath: null
         };
     }),
 
@@ -99,10 +102,10 @@ export const useStore = create<EditorState>((set) => ({
             fontSize: 48,
             ks: {
                 o: { a: 0, k: 100 },
-                p: { a: 0, k: [state.animation.w / 2, state.animation.h / 2, 0] },
-                s: { a: 0, k: [100, 100, 100] },
+                p: { a: 0, k: [state.animation.w / 2, state.animation.h / 2, 0] as Vector3 },
+                s: { a: 0, k: [100, 100, 100] as Vector3 },
                 r: { a: 0, k: 0 },
-                a: { a: 0, k: [0, 0, 0] },
+                a: { a: 0, k: [0, 0, 0] as Vector3 },
             },
             ip: 0,
             op: state.animation.op,
@@ -115,7 +118,8 @@ export const useStore = create<EditorState>((set) => ({
                 layers: [newLayer, ...state.animation.layers]
             },
             selectedLayerId: ind,
-            activeTool: 'select'
+            activeTool: 'select',
+            selectedShapePath: null
         };
     }),
 
@@ -719,6 +723,55 @@ export const useStore = create<EditorState>((set) => ({
                 w: width,
                 h: height
             }
+        };
+    }),
+
+    addAsset: (asset) => set((state) => {
+        useHistory.getState().pushState(state.animation);
+        const assets = [...(state.animation.assets || [])];
+        assets.push(asset);
+        return {
+            animation: {
+                ...state.animation,
+                assets
+            }
+        };
+    }),
+
+    addLayerFromAsset: (assetId, position) => set((state) => {
+        useHistory.getState().pushState(state.animation);
+        const asset = state.animation.assets?.find(a => a.id === assetId);
+        if (!asset) return state;
+
+        const ind = Date.now();
+        const layerPos = position ? [position[0], position[1], 0] : [state.animation.w / 2, state.animation.h / 2, 0];
+
+        const newLayer: Layer = {
+            ind,
+            ty: asset.layers ? 0 : 2, // 0 for precomp, 2 for image
+            nm: asset.id,
+            refId: assetId,
+            w: asset.w || state.animation.w,
+            h: asset.h || state.animation.h,
+            ks: {
+                o: { a: 0, k: 100 },
+                p: { a: 0, k: layerPos as Vector3 },
+                s: { a: 0, k: [100, 100, 100] as Vector3 },
+                r: { a: 0, k: 0 },
+                a: { a: 0, k: [(asset.w || state.animation.w) / 2, (asset.h || state.animation.h) / 2, 0] as Vector3 },
+            },
+            ip: 0,
+            op: state.animation.op,
+            st: 0,
+        };
+
+        return {
+            animation: {
+                ...state.animation,
+                layers: [newLayer, ...state.animation.layers]
+            },
+            selectedLayerId: ind,
+            selectedShapePath: null
         };
     }),
 

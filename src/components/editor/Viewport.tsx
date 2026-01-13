@@ -23,6 +23,8 @@ export function Viewport() {
     const addVertex = useStore((state) => state.addVertex);
     const autoKey = useStore((state) => state.autoKey);
     const saveHistory = useStore((state) => state.saveHistory);
+    const addLayerFromAsset = useStore((state) => state.addLayerFromAsset);
+    const zoom = useStore((state) => state.zoom);
 
     // Manipulation State
     const [dragState, setDragState] = useState<{
@@ -342,6 +344,7 @@ export function Viewport() {
         for (let i = 0; i < pathParts.length; i++) {
             const part = pathParts[i];
             currentPath = currentPath ? `${currentPath}.${part}` : part;
+            if (!current || !current[part]) break;
             current = current[part];
 
             if (current && current.ty === 'gr') {
@@ -1057,7 +1060,21 @@ export function Viewport() {
     };
 
     return (
-        <div className="h-full w-full bg-slate-900/50 flex items-center justify-center relative overflow-hidden group">
+        <div
+            className="h-full w-full bg-slate-900/50 flex items-center justify-center relative overflow-hidden group"
+            onDragOver={(e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'copy';
+            }}
+            onDrop={(e) => {
+                e.preventDefault();
+                const assetId = e.dataTransfer.getData('assetId');
+                if (assetId) {
+                    const coords = getCanvasCoords(e);
+                    addLayerFromAsset(assetId, coords);
+                }
+            }}
+        >
             <div className="absolute inset-0 opacity-10"
                 style={{
                     backgroundImage: 'linear-gradient(45deg, #808080 25%, transparent 25%), linear-gradient(-45deg, #808080 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #808080 75%), linear-gradient(-45deg, transparent 75%, #808080 75%)',
@@ -1073,11 +1090,10 @@ export function Viewport() {
                 onDoubleClick={() => activeTool === 'pen' && finishPath(false)}
                 style={{
                     cursor: getCursor(),
-                    aspectRatio: `${animationData.w} / ${animationData.h}`,
-                    width: animationData.w >= animationData.h ? '100%' : 'auto',
-                    height: animationData.w >= animationData.h ? 'auto' : '100%',
-                    maxWidth: '90%',
-                    maxHeight: '90%'
+                    width: animationData.w * zoom,
+                    height: animationData.h * zoom,
+                    minWidth: animationData.w * zoom,
+                    minHeight: animationData.h * zoom
                 }}
             >
                 {/* Dedicated Lottie Container */}
