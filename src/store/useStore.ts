@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { type LottieAnimation, type Layer, createDefaultAnimation, type Vector2, type Vector3 } from '../types/lottie';
+import { type LottieAnimation, type Layer, createDefaultAnimation, type Vector3 } from '../types/lottie';
 import { FontManager } from '../lib/FontManager';
 import { toVector3, toVector2 } from '../lib/lottieUtils';
 import { useHistory } from './useHistory';

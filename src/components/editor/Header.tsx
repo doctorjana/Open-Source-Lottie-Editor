@@ -2,7 +2,7 @@ import { useStore } from '../../store/useStore';
 import { type Layer, type Vector2, type Vector3 } from '../../types/lottie';
 import { clsx } from 'clsx';
 import { Play, Pause, Square, Circle, Trash2, Star, Hexagon, PenTool, MousePointer2, Settings, Download, Upload, Type, ChevronDown, FileJson, FileArchive, Video, KeyRound, Undo, Redo } from 'lucide-react';
-import { loadDotLottie, saveDotLottie, recordCanvasToVideo, svgToLottieAsset, svgToLottieLayer } from '../../lib/lottieUtils';
+import { loadDotLottie, saveDotLottie, recordCanvasToVideo, svgToLottieLayer } from '../../lib/lottieUtils';
 import { useState, useEffect } from 'react';
 
 export function Header() {

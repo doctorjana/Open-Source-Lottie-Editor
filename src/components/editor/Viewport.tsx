@@ -677,17 +677,24 @@ export function Viewport() {
             return;
         }
 
-        if (!selectedLayer) return;
+        // Pen tool specific logic (keep as is)
+        if ((activeTool as string) === 'pen') {
+            // ... existing pen logic ...
+            // (Copying the logic from before would be too long, so I'll just change the structure)
+            // Actually, the previous 'if (activeTool === 'pen')' block handles its own returns.
+            // so we just need to change the logic AFTER that block.
+        }
+        // --- Selection / Manipulation Logic ---
 
-        const intent = getManipulationIntent(x, y);
+        const intent = selectedLayer ? getManipulationIntent(x, y) : { type: 'none' as const };
 
-        if (intent.type === 'move') {
+        if (intent.type === 'move' && selectedLayer) {
             const pos = getVal<[number, number, number]>(selectedLayer.ks.p);
             setDragState({ type: 'move', startMouse: [x, y], startVal: [...pos], layerId: selectedLayer.ind });
-        } else if (intent.type === 'scale') {
+        } else if (intent.type === 'scale' && selectedLayer) {
             const scale = getVal<[number, number, number]>(selectedLayer.ks.s);
             setDragState({ type: 'scale', handle: intent.handle, startMouse: [x, y], startVal: [...scale], layerId: selectedLayer.ind });
-        } else if (intent.type === 'rotate') {
+        } else if (intent.type === 'rotate' && selectedLayer) {
             const pos = getVal<[number, number, number]>(selectedLayer.ks.p);
             const scale = getVal<[number, number, number]>(selectedLayer.ks.s);
             const rotation = getVal<number>(selectedLayer.ks.r);
@@ -699,7 +706,7 @@ export function Viewport() {
 
             const angle = Math.atan2(y - cy, x - cx);
             setDragState({ type: 'rotate', startMouse: [x, y], startVal: rotation || 0, initialAngle: angle, layerId: selectedLayer.ind });
-        } else if (intent.type === 'vertex_move') {
+        } else if (intent.type === 'vertex_move' && selectedLayer) {
             const paths = getAllPaths(selectedLayer);
             const p = paths.find(path => path.path === intent.pathData?.path);
             if (p && intent.pathData) {
@@ -717,19 +724,52 @@ export function Viewport() {
                     pathData: intent.pathData
                 });
             }
-        } else if (intent.type === 'shape_move') {
+        } else if (intent.type === 'shape_move' && selectedLayer) {
             const shapeInfo = getSelectedShapeInfo();
             if (shapeInfo && shapeInfo.item) {
                 const tr = shapeInfo.item.tr || shapeInfo.item.p;
                 const startVal = getVal<number[]>(tr ? (shapeInfo.item.tr ? tr.p : tr) : { k: [0, 0] });
                 setDragState({ type: 'shape_move', startMouse: [x, y], startVal: [...startVal], shapePath: intent.shapePath, layerId: selectedLayer.ind });
             }
-        } else if (intent.type === 'shape_scale') {
+        } else if (intent.type === 'shape_scale' && selectedLayer) {
             const shapeInfo = getSelectedShapeInfo();
             if (shapeInfo && shapeInfo.item) {
                 const tr = shapeInfo.item.tr || shapeInfo.item.s;
                 const startVal = getVal<number[]>(tr ? (shapeInfo.item.tr ? tr.s : tr) : { k: [100, 100] });
                 setDragState({ type: 'shape_scale', handle: intent.handle, startMouse: [x, y], startVal: [...startVal], shapePath: intent.shapePath, layerId: selectedLayer.ind });
+            }
+        } else if (intent.type === 'none') {
+            // Check for selection of OTHER layers
+            let foundLayer = false;
+            // Iterate in reverse to check top-most layers first
+            // Note: animationData.layers has type Layer[], so we iterate directly
+
+            // Using a simple reverse loop to avoid creating a new array
+            for (let i = animationData.layers.length - 1; i >= 0; i--) {
+                const layer = animationData.layers[i];
+                if (layer.ind === selectedLayerId) continue;
+
+                const bounds = getLayerBounds(layer);
+                const pos = getVal<[number, number, number]>(layer.ks.p);
+                const scale = getVal<[number, number, number]>(layer.ks.s);
+
+                const w = bounds.width * (scale[0] / 100);
+                const h = bounds.height * (scale[1] / 100);
+                const ox = bounds.offsetX * (scale[0] / 100);
+                const oy = bounds.offsetY * (scale[1] / 100);
+                const cx = pos[0] + ox;
+                const cy = pos[1] + oy;
+
+                if (x > cx - w / 2 && x < cx + w / 2 && y > cy - h / 2 && y < cy + h / 2) {
+                    useStore.getState().selectLayer(layer.ind);
+                    foundLayer = true;
+                    break;
+                }
+            }
+
+            if (!foundLayer) {
+                // Deselect if clicked on empty space
+                useStore.getState().selectLayer(null);
             }
         }
 
