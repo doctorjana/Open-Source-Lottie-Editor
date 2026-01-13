@@ -22,6 +22,7 @@ export function Viewport() {
     const deleteVertex = useStore((state) => state.deleteVertex);
     const addVertex = useStore((state) => state.addVertex);
     const autoKey = useStore((state) => state.autoKey);
+    const saveHistory = useStore((state) => state.saveHistory);
 
     // Manipulation State
     const [dragState, setDragState] = useState<{
@@ -46,6 +47,7 @@ export function Viewport() {
 
     // Prevent feedback loop when setting time from lottie event
     const isLottieUpdatingTime = useRef(false);
+    const hasPushedHistory = useRef(false);
 
     useEffect(() => {
         if (!lottieRef.current) return;
@@ -727,6 +729,8 @@ export function Viewport() {
                 setDragState({ type: 'shape_scale', handle: intent.handle, startMouse: [x, y], startVal: [...startVal], shapePath: intent.shapePath, layerId: selectedLayer.ind });
             }
         }
+
+        hasPushedHistory.current = false;
     };
 
     const handleMouseMove = useCallback((e: MouseEvent) => {
@@ -748,12 +752,18 @@ export function Viewport() {
         const dx = x - dragState.startMouse[0];
         const dy = y - dragState.startMouse[1];
 
+        // Push history once per drag
+        if (!hasPushedHistory.current && (dx !== 0 || dy !== 0)) {
+            saveHistory();
+            hasPushedHistory.current = true;
+        }
+
         if (dragState.type === 'move' && selectedLayer) {
             const newVal: [number, number, number] = [dragState.startVal[0] + dx, dragState.startVal[1] + dy, 0];
             if (selectedLayer.ks.p.a === 1 || autoKey) {
-                addKeyframe(selectedLayer.ind, 'ks.p', currentTime, newVal);
+                addKeyframe(selectedLayer.ind, 'ks.p', currentTime, newVal, true);
             } else {
-                updateLayer(selectedLayer.ind, { ks: { ...selectedLayer.ks, p: { ...selectedLayer.ks.p, k: newVal } } });
+                updateLayer(selectedLayer.ind, { ks: { ...selectedLayer.ks, p: { ...selectedLayer.ks.p, k: newVal } } }, true);
             }
         } else if (dragState.type === 'scale' && dragState.handle && selectedLayer) {
             const pos = getVal<[number, number, number]>(selectedLayer.ks.p);
@@ -770,9 +780,9 @@ export function Viewport() {
             const scaleRatio = currentDist / startDist;
             const newVal: [number, number, number] = [dragState.startVal[0] * scaleRatio, dragState.startVal[1] * scaleRatio, 100];
             if (selectedLayer.ks.s.a === 1 || autoKey) {
-                addKeyframe(selectedLayer.ind, 'ks.s', currentTime, newVal);
+                addKeyframe(selectedLayer.ind, 'ks.s', currentTime, newVal, true);
             } else {
-                updateLayer(selectedLayer.ind, { ks: { ...selectedLayer.ks, s: { ...selectedLayer.ks.s, k: newVal } } });
+                updateLayer(selectedLayer.ind, { ks: { ...selectedLayer.ks, s: { ...selectedLayer.ks.s, k: newVal } } }, true);
             }
         } else if (dragState.type === 'rotate' && selectedLayer) {
             const pos = getVal<[number, number, number]>(selectedLayer.ks.p);
@@ -789,9 +799,9 @@ export function Viewport() {
             const newVal = dragState.startVal + deltaDeg;
 
             if (selectedLayer.ks.r?.a === 1 || autoKey) {
-                addKeyframe(selectedLayer.ind, 'ks.r', currentTime, newVal);
+                addKeyframe(selectedLayer.ind, 'ks.r', currentTime, newVal, true);
             } else {
-                updateLayer(selectedLayer.ind, { ks: { ...selectedLayer.ks, r: { a: 0, ...selectedLayer.ks.r, k: newVal } } });
+                updateLayer(selectedLayer.ind, { ks: { ...selectedLayer.ks, r: { a: 0, ...selectedLayer.ks.r, k: newVal } } }, true);
             }
         } else if (dragState.type === 'pen_bezier') {
             setPenPoints(prev => {
@@ -827,9 +837,9 @@ export function Viewport() {
                 }
 
                 if (p.ks.a === 1 || autoKey) {
-                    addKeyframe(selectedLayer.ind, dragState.pathData.path, currentTime, ks);
+                    addKeyframe(selectedLayer.ind, dragState.pathData.path, currentTime, ks, true);
                 } else {
-                    updateLayerProperty(selectedLayer.ind, dragState.pathData.path, ks);
+                    updateLayerProperty(selectedLayer.ind, dragState.pathData.path, ks, true);
                 }
             }
         } else if (dragState.type === 'shape_move' && selectedLayer && dragState.shapePath) {
@@ -841,9 +851,9 @@ export function Viewport() {
                 const currentProp = isGroup ? shapeInfo.item.it.find((it: any) => it.ty === 'tr')?.p : shapeInfo.item.p;
 
                 if ((currentProp && currentProp.a === 1) || autoKey) {
-                    addKeyframe(selectedLayer.ind, propPath, currentTime, newVal);
+                    addKeyframe(selectedLayer.ind, propPath, currentTime, newVal, true);
                 } else {
-                    updateLayerProperty(selectedLayer.ind, propPath, newVal);
+                    updateLayerProperty(selectedLayer.ind, propPath, newVal, true);
                 }
             }
         } else if (dragState.type === 'shape_scale' && selectedLayer && dragState.shapePath && dragState.handle) {
@@ -863,9 +873,9 @@ export function Viewport() {
                     const currentProp = isGroup ? shapeInfo.item.it.find((it: any) => it.ty === 'tr')?.s : shapeInfo.item.s;
 
                     if ((currentProp && currentProp.a === 1) || autoKey) {
-                        addKeyframe(selectedLayer.ind, propPath, currentTime, [...newVal, 100]);
+                        addKeyframe(selectedLayer.ind, propPath, currentTime, [...newVal, 100], true);
                     } else {
-                        updateLayerProperty(selectedLayer.ind, propPath, [...newVal, 100]);
+                        updateLayerProperty(selectedLayer.ind, propPath, [...newVal, 100], true);
                     }
                 }
             }
@@ -1058,10 +1068,17 @@ export function Viewport() {
 
             <div
                 ref={containerRef}
-                className="w-[80%] h-[80%] shadow-2xl bg-white relative overflow-hidden"
+                className="shadow-2xl bg-white relative overflow-hidden"
                 onMouseDown={handleMouseDown}
                 onDoubleClick={() => activeTool === 'pen' && finishPath(false)}
-                style={{ cursor: getCursor(), aspectRatio: `${animationData.w} / ${animationData.h}`, maxWidth: '100%', maxHeight: '100%' }}
+                style={{
+                    cursor: getCursor(),
+                    aspectRatio: `${animationData.w} / ${animationData.h}`,
+                    width: animationData.w >= animationData.h ? '100%' : 'auto',
+                    height: animationData.w >= animationData.h ? 'auto' : '100%',
+                    maxWidth: '90%',
+                    maxHeight: '90%'
+                }}
             >
                 {/* Dedicated Lottie Container */}
                 <div ref={lottieRef} className="absolute inset-0 pointer-events-none" />

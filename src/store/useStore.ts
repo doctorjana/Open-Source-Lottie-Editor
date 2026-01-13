@@ -18,8 +18,8 @@ interface EditorState {
 
     // Actions
     setAnimation: (animation: LottieAnimation) => void;
-    updateLayer: (index: number, layer: Partial<Layer>) => void;
-    updateLayerProperty: (layerInd: number, propertyPath: string, value: any) => void;
+    updateLayer: (index: number, layer: Partial<Layer>, skipHistory?: boolean) => void;
+    updateLayerProperty: (layerInd: number, propertyPath: string, value: any, skipHistory?: boolean) => void;
     addLayer: (layer: Layer) => void;
     addTextLayer: (text: string) => void;
     deleteLayer: (index: number) => void;
@@ -30,7 +30,8 @@ interface EditorState {
     togglePlayback: () => void;
     setTool: (tool: 'select' | 'rectangle' | 'circle' | 'star' | 'polygon' | 'pen' | 'text') => void;
     toggleAutoKey: () => void;
-    addKeyframe: (layerInd: number, propertyPath: string, time: number, value: any) => void;
+    saveHistory: () => void;
+    addKeyframe: (layerInd: number, propertyPath: string, time: number, value: any, skipHistory?: boolean) => void;
     toggleAnimation: (layerInd: number, propertyPath: string) => void;
     syncTextToShapes: (layerInd: number) => Promise<void>;
     convertToPath: (layerInd: number, shapePath: string) => void;
@@ -62,8 +63,10 @@ export const useStore = create<EditorState>((set) => ({
         set({ animation, selectedLayerId: null, currentTime: 0, isPlaying: false });
     },
 
-    updateLayer: (ind, layerUpdate) => set((state) => {
-        useHistory.getState().pushState(state.animation);
+    updateLayer: (ind, layerUpdate, skipHistory = false) => set((state) => {
+        if (!skipHistory) {
+            useHistory.getState().pushState(state.animation);
+        }
         const newLayers = state.animation.layers.map((layer) => {
             if (layer.ind === ind) {
                 return { ...layer, ...layerUpdate };
@@ -116,8 +119,10 @@ export const useStore = create<EditorState>((set) => ({
         };
     }),
 
-    updateLayerProperty: (layerInd, propertyPath, value) => set((state) => {
-        useHistory.getState().pushState(state.animation);
+    updateLayerProperty: (layerInd, propertyPath, value, skipHistory = false) => set((state) => {
+        if (!skipHistory) {
+            useHistory.getState().pushState(state.animation);
+        }
         const newLayers = state.animation.layers.map((layer) => {
             if (layer.ind !== layerInd) return layer;
             const newLayer = JSON.parse(JSON.stringify(layer));
@@ -136,6 +141,10 @@ export const useStore = create<EditorState>((set) => ({
         });
         return { animation: { ...state.animation, layers: newLayers } };
     }),
+
+    saveHistory: () => {
+        useHistory.getState().pushState(useStore.getState().animation);
+    },
 
     deleteShape: (layerInd, shapePath) => set((state) => {
         useHistory.getState().pushState(state.animation);
@@ -194,7 +203,10 @@ export const useStore = create<EditorState>((set) => ({
     setTool: (tool) => set({ activeTool: tool }),
     toggleAutoKey: () => set((state) => ({ autoKey: !state.autoKey })),
 
-    addKeyframe: (layerInd, propertyPath, time, value) => set((state) => {
+    addKeyframe: (layerInd, propertyPath, time, value, skipHistory = false) => set((state) => {
+        if (!skipHistory) {
+            useHistory.getState().pushState(state.animation);
+        }
         const newLayers = state.animation.layers.map((layer) => {
             if (layer.ind !== layerInd) return layer;
 
