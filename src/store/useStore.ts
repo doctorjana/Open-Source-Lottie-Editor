@@ -14,6 +14,7 @@ interface EditorState {
     lockedIds: Record<number, boolean>;
     activeTool: 'select' | 'rectangle' | 'circle' | 'star' | 'polygon' | 'pen' | 'text';
     selectedShapePath: string | null; // e.g. "shapes.0.it.1"
+    autoKey: boolean; // When true, any property change creates a keyframe
 
     // Actions
     setAnimation: (animation: LottieAnimation) => void;
@@ -28,6 +29,7 @@ interface EditorState {
     setTime: (time: number) => void;
     togglePlayback: () => void;
     setTool: (tool: 'select' | 'rectangle' | 'circle' | 'star' | 'polygon' | 'pen' | 'text') => void;
+    toggleAutoKey: () => void;
     addKeyframe: (layerInd: number, propertyPath: string, time: number, value: any) => void;
     toggleAnimation: (layerInd: number, propertyPath: string) => void;
     syncTextToShapes: (layerInd: number) => Promise<void>;
@@ -54,6 +56,7 @@ export const useStore = create<EditorState>((set) => ({
     zoom: 1,
     activeTool: 'select',
     selectedShapePath: null,
+    autoKey: false,
 
     setAnimation: (animation) => {
         console.log(`[setAnimation] Total Layers: ${animation.layers.length}, Assets: ${animation.assets?.length || 0}`);
@@ -190,6 +193,7 @@ export const useStore = create<EditorState>((set) => ({
 
     togglePlayback: () => set((state) => ({ isPlaying: !state.isPlaying })),
     setTool: (tool) => set({ activeTool: tool }),
+    toggleAutoKey: () => set((state) => ({ autoKey: !state.autoKey })),
 
     addKeyframe: (layerInd, propertyPath, time, value) => set((state) => {
         const newLayers = state.animation.layers.map((layer) => {

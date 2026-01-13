@@ -1,7 +1,7 @@
 import { useStore } from '../../store/useStore';
 import { type Layer } from '../../types/lottie';
 import { clsx } from 'clsx';
-import { Play, Pause, Square, Circle, Trash2, Star, Hexagon, PenTool, MousePointer2, Settings, Download, Upload, Type, ChevronDown, FileJson, FileArchive, Video } from 'lucide-react';
+import { Play, Pause, Square, Circle, Trash2, Star, Hexagon, PenTool, MousePointer2, Settings, Download, Upload, Type, ChevronDown, FileJson, FileArchive, Video, KeyRound } from 'lucide-react';
 import { loadDotLottie, saveDotLottie, recordCanvasToVideo, svgToLottieLayer } from '../../lib/lottieUtils';
 import { useState, useEffect } from 'react';
 
@@ -18,6 +18,8 @@ export function Header() {
     const setTool = useStore((state) => state.setTool);
     const addTextLayer = useStore((state) => state.addTextLayer);
     const syncTextToShapes = useStore((state) => state.syncTextToShapes);
+    const autoKey = useStore((state) => state.autoKey);
+    const toggleAutoKey = useStore((state) => state.toggleAutoKey);
 
     const handleAddRect = () => {
         const newLayer: Layer = {
@@ -395,6 +397,19 @@ export function Header() {
                 <div className="h-6 w-[1px] bg-border mx-2" />
 
                 <div className="flex gap-2">
+                    <button
+                        onClick={toggleAutoKey}
+                        className={clsx(
+                            "p-1.5 rounded flex items-center gap-1.5 transition-all",
+                            autoKey
+                                ? "bg-amber-500 text-white shadow-lg shadow-amber-500/30"
+                                : "hover:bg-muted text-muted-foreground"
+                        )}
+                        title={autoKey ? "Auto-Key ON - Property changes create keyframes" : "Auto-Key OFF - Click to enable automatic keyframes"}
+                    >
+                        <KeyRound className="w-4 h-4" />
+                        <span className="text-[10px] font-bold uppercase tracking-tight">Auto</span>
+                    </button>
                     <button
                         onClick={() => selectedLayerId && deleteLayer(selectedLayerId)}
                         disabled={!selectedLayerId}

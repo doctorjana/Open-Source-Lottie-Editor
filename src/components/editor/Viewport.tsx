@@ -21,6 +21,7 @@ export function Viewport() {
     const addKeyframe = useStore((state) => state.addKeyframe);
     const deleteVertex = useStore((state) => state.deleteVertex);
     const addVertex = useStore((state) => state.addVertex);
+    const autoKey = useStore((state) => state.autoKey);
 
     // Manipulation State
     const [dragState, setDragState] = useState<{
@@ -749,7 +750,7 @@ export function Viewport() {
 
         if (dragState.type === 'move' && selectedLayer) {
             const newVal: [number, number, number] = [dragState.startVal[0] + dx, dragState.startVal[1] + dy, 0];
-            if (selectedLayer.ks.p.a === 1) {
+            if (selectedLayer.ks.p.a === 1 || autoKey) {
                 addKeyframe(selectedLayer.ind, 'ks.p', currentTime, newVal);
             } else {
                 updateLayer(selectedLayer.ind, { ks: { ...selectedLayer.ks, p: { ...selectedLayer.ks.p, k: newVal } } });
@@ -768,7 +769,7 @@ export function Viewport() {
             if (startDist < 1) return;
             const scaleRatio = currentDist / startDist;
             const newVal: [number, number, number] = [dragState.startVal[0] * scaleRatio, dragState.startVal[1] * scaleRatio, 100];
-            if (selectedLayer.ks.s.a === 1) {
+            if (selectedLayer.ks.s.a === 1 || autoKey) {
                 addKeyframe(selectedLayer.ind, 'ks.s', currentTime, newVal);
             } else {
                 updateLayer(selectedLayer.ind, { ks: { ...selectedLayer.ks, s: { ...selectedLayer.ks.s, k: newVal } } });
@@ -787,7 +788,7 @@ export function Viewport() {
             const deltaDeg = deltaRad * (180 / Math.PI);
             const newVal = dragState.startVal + deltaDeg;
 
-            if (selectedLayer.ks.r?.a === 1) {
+            if (selectedLayer.ks.r?.a === 1 || autoKey) {
                 addKeyframe(selectedLayer.ind, 'ks.r', currentTime, newVal);
             } else {
                 updateLayer(selectedLayer.ind, { ks: { ...selectedLayer.ks, r: { a: 0, ...selectedLayer.ks.r, k: newVal } } });
@@ -825,7 +826,7 @@ export function Viewport() {
                     ks.o[dragState.pathData.vertexIdx] = newPos;
                 }
 
-                if (p.ks.a === 1) {
+                if (p.ks.a === 1 || autoKey) {
                     addKeyframe(selectedLayer.ind, dragState.pathData.path, currentTime, ks);
                 } else {
                     updateLayerProperty(selectedLayer.ind, dragState.pathData.path, ks);
@@ -839,7 +840,7 @@ export function Viewport() {
                 const propPath = isGroup ? `${dragState.shapePath}.it.${shapeInfo.item.it.findIndex((it: any) => it.ty === 'tr')}.p` : `${dragState.shapePath}.p`;
                 const currentProp = isGroup ? shapeInfo.item.it.find((it: any) => it.ty === 'tr')?.p : shapeInfo.item.p;
 
-                if (currentProp && currentProp.a === 1) {
+                if ((currentProp && currentProp.a === 1) || autoKey) {
                     addKeyframe(selectedLayer.ind, propPath, currentTime, newVal);
                 } else {
                     updateLayerProperty(selectedLayer.ind, propPath, newVal);
@@ -861,7 +862,7 @@ export function Viewport() {
                     const propPath = isGroup ? `${dragState.shapePath}.it.${shapeInfo.item.it.findIndex((it: any) => it.ty === 'tr')}.s` : `${dragState.shapePath}.s`;
                     const currentProp = isGroup ? shapeInfo.item.it.find((it: any) => it.ty === 'tr')?.s : shapeInfo.item.s;
 
-                    if (currentProp && currentProp.a === 1) {
+                    if ((currentProp && currentProp.a === 1) || autoKey) {
                         addKeyframe(selectedLayer.ind, propPath, currentTime, [...newVal, 100]);
                     } else {
                         updateLayerProperty(selectedLayer.ind, propPath, [...newVal, 100]);
@@ -869,7 +870,7 @@ export function Viewport() {
                 }
             }
         }
-    }, [dragState, selectedLayer, currentTime, addKeyframe, updateLayer, updateLayerProperty, getVal, getManipulationIntent, activeTool, getAllPaths, getSelectedShapeInfo]);
+    }, [dragState, selectedLayer, currentTime, addKeyframe, updateLayer, updateLayerProperty, getVal, getManipulationIntent, activeTool, getAllPaths, getSelectedShapeInfo, autoKey]);
 
     const handleMouseUp = useCallback(() => setDragState(null), []);
 

@@ -1,5 +1,8 @@
 # Open Source Lottie Editor
 
+> [!WARNING]
+> This project is currently in active development. Many features are still being implemented, and you may encounter bugs or breaking changes.
+
 A powerful, web-based Lottie editor built with React, TypeScript, and Vite. This tool allows you to create, edit, and export Lottie animations directly in your browser.
 
 ## Live Demo
