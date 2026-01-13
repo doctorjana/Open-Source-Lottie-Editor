@@ -38,7 +38,6 @@ interface EditorState {
     deleteVertex: (layerInd: number, shapePath: string, vertexIndex: number) => void;
     addVertex: (layerInd: number, shapePath: string, afterIndex: number) => void;
     selectShape: (path: string | null) => void;
-    addIconLayer: (iconName: string, preset: 'draw-in' | 'scale-in' | 'fade-in') => Promise<void>;
     setCanvasSize: (width: number, height: number) => void;
 
     // Undo/Redo
@@ -610,63 +609,6 @@ export const useStore = create<EditorState>((set) => ({
         return state;
     }),
 
-    addIconLayer: async (iconName: string, preset: 'draw-in' | 'scale-in' | 'fade-in') => {
-        const { IconManager } = await import('../lib/IconManager');
-        const svgPath = await IconManager.fetchIconSvgPath(iconName);
-        if (!svgPath) return;
-
-        const shapePaths = IconManager.parseSvgPath(svgPath);
-        const ind = Date.now();
-        const state = useStore.getState();
-
-        const newLayer: Layer = {
-            ind,
-            ty: 4,
-            nm: `Icon: ${iconName}`,
-            ks: {
-                o: { a: 0, k: 100 },
-                p: { a: 0, k: [state.animation.w / 2, state.animation.h / 2, 0] },
-                s: { a: 0, k: [400, 400, 100] },
-                r: { a: 0, k: 0 },
-                a: { a: 0, k: [12, 12, 0] },
-            },
-            ip: 0,
-            op: state.animation.op,
-            st: 0,
-            shapes: [
-                {
-                    ty: 'gr',
-                    nm: iconName,
-                    it: [
-                        ...shapePaths.map((p, i) => ({
-                            ty: 'sh',
-                            nm: `Path ${i}`,
-                            ks: { a: 0 as const, k: p }
-                        })),
-                        {
-                            ty: 'fl',
-                            nm: 'Fill',
-                            c: { a: 0 as const, k: [0, 0, 0] },
-                            o: { a: 0 as const, k: 100 }
-                        },
-                        {
-                            ty: 'tr',
-                            nm: 'Transform',
-                            p: { a: 0 as const, k: [0, 0] },
-                            a: { a: 0 as const, k: [0, 0] },
-                            s: { a: 0 as const, k: [100, 100] },
-                            r: { a: 0 as const, k: 0 },
-                            o: { a: 0 as const, k: 100 }
-                        }
-                    ]
-                }
-            ]
-        };
-
-        IconManager.applyPreset(newLayer, preset);
-
-        state.addLayer(newLayer);
-    },
 
     deleteVertex: (layerInd, shapePath, vertexIndex) => set((state) => {
         const newLayers = state.animation.layers.map((layer) => {
@@ -784,3 +726,8 @@ export const useStore = create<EditorState>((set) => ({
         return state;
     })
 }));
+
+if (typeof window !== 'undefined') {
+    (window as any).useStore = useStore;
+}
+

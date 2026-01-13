@@ -1,7 +1,7 @@
 import { useStore } from '../../store/useStore';
 import { type Layer } from '../../types/lottie';
 import { clsx } from 'clsx';
-import { Play, Pause, Square, Circle, Trash2, Star, Hexagon, PenTool, MousePointer2, Settings, Download, Upload, Type, ChevronDown, FileJson, FileArchive, Video, KeyRound } from 'lucide-react';
+import { Play, Pause, Square, Circle, Trash2, Star, Hexagon, PenTool, MousePointer2, Settings, Download, Upload, Type, ChevronDown, FileJson, FileArchive, Video, KeyRound, Undo, Redo } from 'lucide-react';
 import { loadDotLottie, saveDotLottie, recordCanvasToVideo, svgToLottieLayer } from '../../lib/lottieUtils';
 import { useState, useEffect } from 'react';
 
@@ -20,6 +20,8 @@ export function Header() {
     const syncTextToShapes = useStore((state) => state.syncTextToShapes);
     const autoKey = useStore((state) => state.autoKey);
     const toggleAutoKey = useStore((state) => state.toggleAutoKey);
+    const undo = useStore((state) => state.undo);
+    const redo = useStore((state) => state.redo);
 
     const handleAddRect = () => {
         const newLayer: Layer = {
@@ -243,6 +245,24 @@ export function Header() {
         setLocalCanvasSize({ w: animation.w, h: animation.h });
     }, [animation.w, animation.h]);
 
+    // Keyboard shortcuts
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // Undo: Ctrl+Z (or Cmd+Z on Mac)
+            if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+                e.preventDefault();
+                undo();
+            }
+            // Redo: Ctrl+Shift+Z or Ctrl+Y (or Cmd+Shift+Z on Mac)
+            if ((e.ctrlKey || e.metaKey) && (e.shiftKey && e.key === 'z' || e.key === 'y')) {
+                e.preventDefault();
+                redo();
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [undo, redo]);
+
     const handleSettingsSave = () => {
         setCanvasSize(canvasSize.w, canvasSize.h);
         setIsSettingsOpen(false);
@@ -392,6 +412,32 @@ export function Header() {
                     <ToolButton tool="circle" icon={Circle} title="Ellipse Tool (O)" onClick={handleAddCircle} />
                     <ToolButton tool="star" icon={Star} title="Star Tool" onClick={handleAddStar} />
                     <ToolButton tool="polygon" icon={Hexagon} title="Polygon Tool" onClick={handleAddPolygon} />
+                </div>
+
+                <div className="h-6 w-[1px] bg-border mx-2" />
+
+                {/* Undo/Redo */}
+                <div className="flex items-center gap-0.5 bg-muted/30 p-1 rounded-lg border border-border/50">
+                    <button
+                        onClick={undo}
+                        className="p-1.5 hover:bg-muted rounded transition-colors group relative"
+                        title="Undo (Ctrl+Z)"
+                    >
+                        <Undo className="w-4 h-4" />
+                        <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 bg-popover text-popover-foreground px-2 py-0.5 rounded text-[10px] whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 shadow-md">
+                            Undo (Ctrl+Z)
+                        </span>
+                    </button>
+                    <button
+                        onClick={redo}
+                        className="p-1.5 hover:bg-muted rounded transition-colors group relative"
+                        title="Redo (Ctrl+Shift+Z)"
+                    >
+                        <Redo className="w-4 h-4" />
+                        <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 bg-popover text-popover-foreground px-2 py-0.5 rounded text-[10px] whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 shadow-md">
+                            Redo (Ctrl+Shift+Z)
+                        </span>
+                    </button>
                 </div>
 
                 <div className="h-6 w-[1px] bg-border mx-2" />

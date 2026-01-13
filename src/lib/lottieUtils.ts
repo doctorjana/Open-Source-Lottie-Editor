@@ -18,144 +18,169 @@ export const parseSvgPathD = (d: string): ShapePath[] => {
 
     const parseNum = () => parseFloat(tokens[i++]) || 0;
 
+
+    let currentCmdTag = ''; // Tracks the current active command for implicit repetition
+
     while (i < tokens.length) {
         const token = tokens[i];
+        let cmdToExec = '';
+
         if (/[MLHVCSQTAZmlhvcsqtaz]/.test(token)) {
-            lastCmd = token;
+            currentCmdTag = token;
+            cmdToExec = token;
             i++;
-
-            const isRelative = token === token.toLowerCase();
-            const cmd = token.toUpperCase();
-
-            if (cmd === 'M') {
-                if (currentPath.v.length > 0) paths.push(currentPath);
-                currentPath = { v: [], i: [], o: [], c: false };
-                let x = parseNum();
-                let y = parseNum();
-                if (isRelative) { x += lastX; y += lastY; }
-                lastX = x; lastY = y;
-                currentPath.v.push([x, y]);
-                currentPath.i.push([0, 0]);
-                currentPath.o.push([0, 0]);
-            } else if (cmd === 'L') {
-                let x = parseNum();
-                let y = parseNum();
-                if (isRelative) { x += lastX; y += lastY; }
-                lastX = x; lastY = y;
-                currentPath.v.push([x, y]);
-                currentPath.i.push([0, 0]);
-                currentPath.o.push([0, 0]);
-            } else if (cmd === 'H') {
-                let x = parseNum();
-                if (isRelative) x += lastX;
-                lastX = x;
-                currentPath.v.push([x, lastY]);
-                currentPath.i.push([0, 0]);
-                currentPath.o.push([0, 0]);
-            } else if (cmd === 'V') {
-                let y = parseNum();
-                if (isRelative) y += lastY;
-                lastY = y;
-                currentPath.v.push([lastX, y]);
-                currentPath.i.push([0, 0]);
-                currentPath.o.push([0, 0]);
-            } else if (cmd === 'C') {
-                const x1 = parseNum() + (isRelative ? lastX : 0);
-                const y1 = parseNum() + (isRelative ? lastY : 0);
-                const x2 = parseNum() + (isRelative ? lastX : 0);
-                const y2 = parseNum() + (isRelative ? lastY : 0);
-                const x = parseNum() + (isRelative ? lastX : 0);
-                const y = parseNum() + (isRelative ? lastY : 0);
-
-                const prevV = currentPath.v[currentPath.v.length - 1];
-                currentPath.o[currentPath.o.length - 1] = [x1 - prevV[0], y1 - prevV[1]];
-                currentPath.v.push([x, y]);
-                currentPath.i.push([x2 - x, y2 - y]);
-                currentPath.o.push([0, 0]);
-                lastCx = x2; lastCy = y2;
-                lastX = x; lastY = y;
-            } else if (cmd === 'S') {
-                // Smooth cubic - reflect last control point
-                let cx1 = lastX, cy1 = lastY;
-                if (['C', 'S', 'c', 's'].includes(lastCmd)) {
-                    cx1 = 2 * lastX - lastCx;
-                    cy1 = 2 * lastY - lastCy;
-                }
-                const x2 = parseNum() + (isRelative ? lastX : 0);
-                const y2 = parseNum() + (isRelative ? lastY : 0);
-                const x = parseNum() + (isRelative ? lastX : 0);
-                const y = parseNum() + (isRelative ? lastY : 0);
-
-                const prevV = currentPath.v[currentPath.v.length - 1];
-                currentPath.o[currentPath.o.length - 1] = [cx1 - prevV[0], cy1 - prevV[1]];
-                currentPath.v.push([x, y]);
-                currentPath.i.push([x2 - x, y2 - y]);
-                currentPath.o.push([0, 0]);
-                lastCx = x2; lastCy = y2;
-                lastX = x; lastY = y;
-            } else if (cmd === 'Q') {
-                const x1 = parseNum() + (isRelative ? lastX : 0);
-                const y1 = parseNum() + (isRelative ? lastY : 0);
-                const x = parseNum() + (isRelative ? lastX : 0);
-                const y = parseNum() + (isRelative ? lastY : 0);
-
-                const prevV = currentPath.v[currentPath.v.length - 1];
-                // Quadratic to Cubic conversion
-                const c1x = prevV[0] + 2 / 3 * (x1 - prevV[0]);
-                const c1y = prevV[1] + 2 / 3 * (y1 - prevV[1]);
-                const c2x = x + 2 / 3 * (x1 - x);
-                const c2y = y + 2 / 3 * (y1 - y);
-
-                currentPath.o[currentPath.o.length - 1] = [c1x - prevV[0], c1y - prevV[1]];
-                currentPath.v.push([x, y]);
-                currentPath.i.push([c2x - x, c2y - y]);
-                currentPath.o.push([0, 0]);
-                lastCx = x1; lastCy = y1;
-                lastX = x; lastY = y;
-            } else if (cmd === 'T') {
-                // Smooth quadratic - reflect last control point
-                let qx = lastX, qy = lastY;
-                if (['Q', 'T', 'q', 't'].includes(lastCmd)) {
-                    qx = 2 * lastX - lastCx;
-                    qy = 2 * lastY - lastCy;
-                }
-                const x = parseNum() + (isRelative ? lastX : 0);
-                const y = parseNum() + (isRelative ? lastY : 0);
-
-                const prevV = currentPath.v[currentPath.v.length - 1];
-                const c1x = prevV[0] + 2 / 3 * (qx - prevV[0]);
-                const c1y = prevV[1] + 2 / 3 * (qy - prevV[1]);
-                const c2x = x + 2 / 3 * (qx - x);
-                const c2y = y + 2 / 3 * (qy - y);
-
-                currentPath.o[currentPath.o.length - 1] = [c1x - prevV[0], c1y - prevV[1]];
-                currentPath.v.push([x, y]);
-                currentPath.i.push([c2x - x, c2y - y]);
-                currentPath.o.push([0, 0]);
-                lastCx = qx; lastCy = qy;
-                lastX = x; lastY = y;
-            } else if (cmd === 'A') {
-                // Arc command - we need to consume all parameters to advance the token index
-                // Full arc-to-bezier conversion is complex, so we simplify to a line
-                parseNum(); // rx
-                parseNum(); // ry
-                parseNum(); // x-axis-rotation
-                parseNum(); // large-arc-flag
-                parseNum(); // sweep-flag
-                const x = parseNum() + (isRelative ? lastX : 0);
-                const y = parseNum() + (isRelative ? lastY : 0);
-                // Simplified: just draw a line (proper arc conversion would need bezier approximation)
-                currentPath.v.push([x, y]);
-                currentPath.i.push([0, 0]);
-                currentPath.o.push([0, 0]);
-                lastX = x; lastY = y;
-            } else if (cmd === 'Z') {
-                currentPath.c = true;
-            }
         } else {
-            // Implicit command continuation
-            i++;
+            // Implicit command
+            if (!currentCmdTag) {
+                // Garbage or invalid start, skip
+                i++;
+                continue;
+            }
+
+            cmdToExec = currentCmdTag;
+
+            // Special rule: Move command becomes Line if repeated
+            if (cmdToExec === 'M') cmdToExec = 'L';
+            if (cmdToExec === 'm') cmdToExec = 'l';
+
+            // Z cannot be implicitly repeated (it takes no args)
+            if (cmdToExec.toUpperCase() === 'Z') {
+                currentCmdTag = '';
+                i++;
+                continue;
+            }
         }
+
+        const isRelative = cmdToExec === cmdToExec.toLowerCase();
+        const cmd = cmdToExec.toUpperCase();
+
+        if (cmd === 'M') {
+            if (currentPath.v.length > 0) paths.push(currentPath);
+            currentPath = { v: [], i: [], o: [], c: false };
+            let x = parseNum();
+            let y = parseNum();
+            if (isRelative) { x += lastX; y += lastY; }
+            lastX = x; lastY = y;
+            currentPath.v.push([x, y]);
+            currentPath.i.push([0, 0]);
+            currentPath.o.push([0, 0]);
+        } else if (cmd === 'L') {
+            let x = parseNum();
+            let y = parseNum();
+            if (isRelative) { x += lastX; y += lastY; }
+            lastX = x; lastY = y;
+            currentPath.v.push([x, y]);
+            currentPath.i.push([0, 0]);
+            currentPath.o.push([0, 0]);
+        } else if (cmd === 'H') {
+            let x = parseNum();
+            if (isRelative) x += lastX;
+            lastX = x;
+            currentPath.v.push([x, lastY]);
+            currentPath.i.push([0, 0]);
+            currentPath.o.push([0, 0]);
+        } else if (cmd === 'V') {
+            let y = parseNum();
+            if (isRelative) y += lastY;
+            lastY = y;
+            currentPath.v.push([lastX, y]);
+            currentPath.i.push([0, 0]);
+            currentPath.o.push([0, 0]);
+        } else if (cmd === 'C') {
+            const x1 = parseNum() + (isRelative ? lastX : 0);
+            const y1 = parseNum() + (isRelative ? lastY : 0);
+            const x2 = parseNum() + (isRelative ? lastX : 0);
+            const y2 = parseNum() + (isRelative ? lastY : 0);
+            const x = parseNum() + (isRelative ? lastX : 0);
+            const y = parseNum() + (isRelative ? lastY : 0);
+
+            const prevV = currentPath.v[currentPath.v.length - 1] || [0, 0];
+            currentPath.o[currentPath.o.length - 1] = [x1 - prevV[0], y1 - prevV[1]];
+            currentPath.v.push([x, y]);
+            currentPath.i.push([x2 - x, y2 - y]);
+            currentPath.o.push([0, 0]);
+            lastCx = x2; lastCy = y2;
+            lastX = x; lastY = y;
+        } else if (cmd === 'S') {
+            // Smooth cubic - reflect last control point
+            let cx1 = lastX, cy1 = lastY;
+            if (['C', 'S', 'c', 's'].includes(lastCmd)) {
+                cx1 = 2 * lastX - lastCx;
+                cy1 = 2 * lastY - lastCy;
+            }
+            const x2 = parseNum() + (isRelative ? lastX : 0);
+            const y2 = parseNum() + (isRelative ? lastY : 0);
+            const x = parseNum() + (isRelative ? lastX : 0);
+            const y = parseNum() + (isRelative ? lastY : 0);
+
+            const prevV = currentPath.v[currentPath.v.length - 1] || [0, 0];
+            currentPath.o[currentPath.o.length - 1] = [cx1 - prevV[0], cy1 - prevV[1]];
+            currentPath.v.push([x, y]);
+            currentPath.i.push([x2 - x, y2 - y]);
+            currentPath.o.push([0, 0]);
+            lastCx = x2; lastCy = y2;
+            lastX = x; lastY = y;
+        } else if (cmd === 'Q') {
+            const x1 = parseNum() + (isRelative ? lastX : 0);
+            const y1 = parseNum() + (isRelative ? lastY : 0);
+            const x = parseNum() + (isRelative ? lastX : 0);
+            const y = parseNum() + (isRelative ? lastY : 0);
+
+            const prevV = currentPath.v[currentPath.v.length - 1] || [0, 0];
+            // Quadratic to Cubic conversion
+            const c1x = prevV[0] + 2 / 3 * (x1 - prevV[0]);
+            const c1y = prevV[1] + 2 / 3 * (y1 - prevV[1]);
+            const c2x = x + 2 / 3 * (x1 - x);
+            const c2y = y + 2 / 3 * (y1 - y);
+
+            currentPath.o[currentPath.o.length - 1] = [c1x - prevV[0], c1y - prevV[1]];
+            currentPath.v.push([x, y]);
+            currentPath.i.push([c2x - x, c2y - y]);
+            currentPath.o.push([0, 0]);
+            lastCx = x1; lastCy = y1;
+            lastX = x; lastY = y;
+        } else if (cmd === 'T') {
+            // Smooth quadratic - reflect last control point
+            let qx = lastX, qy = lastY;
+            if (['Q', 'T', 'q', 't'].includes(lastCmd)) {
+                qx = 2 * lastX - lastCx;
+                qy = 2 * lastY - lastCy;
+            }
+            const x = parseNum() + (isRelative ? lastX : 0);
+            const y = parseNum() + (isRelative ? lastY : 0);
+
+            const prevV = currentPath.v[currentPath.v.length - 1] || [0, 0];
+            const c1x = prevV[0] + 2 / 3 * (qx - prevV[0]);
+            const c1y = prevV[1] + 2 / 3 * (qy - prevV[1]);
+            const c2x = x + 2 / 3 * (qx - x);
+            const c2y = y + 2 / 3 * (qy - y);
+
+            currentPath.o[currentPath.o.length - 1] = [c1x - prevV[0], c1y - prevV[1]];
+            currentPath.v.push([x, y]);
+            currentPath.i.push([c2x - x, c2y - y]);
+            currentPath.o.push([0, 0]);
+            lastCx = qx; lastCy = qy;
+            lastX = x; lastY = y;
+        } else if (cmd === 'A') {
+            // Arc command
+            parseNum(); // rx
+            parseNum(); // ry
+            parseNum(); // x-axis-rotation
+            parseNum(); // large-arc-flag
+            parseNum(); // sweep-flag
+            const x = parseNum() + (isRelative ? lastX : 0);
+            const y = parseNum() + (isRelative ? lastY : 0);
+            // Simplified: just draw a line
+            currentPath.v.push([x, y]);
+            currentPath.i.push([0, 0]);
+            currentPath.o.push([0, 0]);
+            lastX = x; lastY = y;
+        } else if (cmd === 'Z') {
+            currentPath.c = true;
+            currentCmdTag = ''; // Z cannot be repeated
+        }
+
+        lastCmd = cmdToExec;
     }
 
     if (currentPath.v.length > 0) paths.push(currentPath);

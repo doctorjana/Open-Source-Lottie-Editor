@@ -1,9 +1,10 @@
 # Open Source Lottie Editor
 
-> [!WARNING]
-> This project is currently in active development. Many features are still being implemented, and you may encounter bugs or breaking changes.
+> [!CAUTION]
+> **UNDER ACTIVE DEVELOPMENT**
+> This project is currently in early development. Many core features are being implemented daily, and you will encounter bugs, performance issues, or breaking changes. It is NOT recommended for production use yet.
 
-A powerful, web-based Lottie editor built with React, TypeScript, and Vite. This tool allows you to create, edit, and export Lottie animations directly in your browser.
+A powerful, web-based Lottie editor built with React, TypeScript, and Vite. This tool aims to provide an open-source alternative for creating, editing, and exporting Lottie animations directly in your browser.
 
 ## Live Demo
 
@@ -13,8 +14,8 @@ A powerful, web-based Lottie editor built with React, TypeScript, and Vite. This
 
 ### 🛠 Tools
 - **Selection Tool (V)**: Move, scale, and rotate layers and shapes.
-- **Pen Tool (G)**: Draw custom paths with bezier curves.
-- **Text Tool (T)**: Add and edit text layers.
+- **Pen Tool (P)**: Draw custom paths with bezier curves and edit vertices (Alt+Click to delete).
+- **Type Tool (T)**: Add and edit text layers.
 - **Shape Tools**:
   - **Rectangle Tool (R)**
   - **Ellipse Tool (O)**
@@ -22,23 +23,25 @@ A powerful, web-based Lottie editor built with React, TypeScript, and Vite. This
   - **Polygon Tool**
 
 ### 🎨 Manipulation & Editing
-- **Transform**: Precise control over Position, Scale, and Rotation.
-- **Vertex Editing**: Edit individual path points and bezier handles.
-- **Grouping**: Organize shapes into groups.
-- **Fill & Stroke**: Customize colors and stroke properties.
+- **Undo/Redo**: Full history support with `Ctrl+Z` / `Ctrl+Shift+Z`.
+- **Auto-Key**: Automatically create keyframes when properties change.
+- **Vertex Editing**: Precise control over path points and bezier handles.
+- **Fill & Stroke**: Comprehensive control over shape colors and stroke properties.
+- **Transform**: Edit Position, Scale, Rotation, and Opacity.
 
 ### 🎬 Animation & Timeline
 - **Playback Controls**: Play, pause, and scrub through the timeline.
-- **Keyframe Management**: (In progress) Add and manage keyframes for animations.
+- **Animated Properties**: Most properties support keyframing for complex animations.
 
 ### 💾 Import & Export
 - **Import**:
   - `.json` (Lottie JSON)
   - `.lottie` (DotLottie)
+  - `.svg` (Import SVG paths as layers)
 - **Export**:
   - **Lottie JSON**: Standard `.json` file.
   - **DotLottie**: Compressed `.lottie` file.
-  - **Video**: Export as `.mp4` or `.webm`.
+  - **Video**: High-quality export as `.mp4` or `.webm`.
 
 ## Getting Started
 
